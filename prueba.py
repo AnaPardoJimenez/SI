@@ -1,10 +1,5 @@
-from quart import Quart, jsonify
+import user as us
 
-app = Quart(__name__)
-
-@app.route('/hello')
-async def hello():
-    return jsonify({'message': 'Hello, World!'})
-
-if __name__ == '__main__':
-    app.run(host='localhost', port=5050)
+us.create_user("Juan", "Larrondo")
+(uid, token) = us.login_user("Juan", "Larrondo")
+print(uid, "\n", token)

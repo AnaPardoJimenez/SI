@@ -1,5 +1,9 @@
 import pandas as pd
 import os, uuid
+from quart import Quart, jsonify, request
+
+Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
+user_file = "users.txt"
 
 def create_user(username, password):
     """
@@ -21,10 +25,11 @@ def create_user(username, password):
     df = open_or_create_txt()
 
     uid = uuid.uuid4()
+    uid = str(uid)
 
     df.loc[len(df)] = [username, password, uid]
-
-    Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f') # Preguntar el martes con que generarlo 
+    # Persistir el nuevo usuario en disco
+    df.to_csv(user_file, sep="\t", index=False)
 
     return uid, uuid.uuid5(Secret_uuid, uid)
 
@@ -46,7 +51,6 @@ def login_user(username, password):
 
     if not usuario.empty:
         uid = usuario.iloc[0]["UID"]
-        Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f') 
         return uid, uuid.uuid5(Secret_uuid, uid)
     
     return None
@@ -73,9 +77,65 @@ def get_user_id(username):
 
 def open_or_create_txt():
     # Si el archivo existe, lo abre; si no, lo crea vacío
-    if os.path.exists("users.txt"):
-        df = pd.read_csv("users.txt", sep="\t")
+    if os.path.exists(user_file):
+        df = pd.read_csv(user_file, sep="\t")
     else:
         df = pd.DataFrame(columns=["username", "password", "UID"])
-        df.to_csv("users.txt", sep="\t", index=False)
+        df.to_csv(user_file, sep="\t", index=False)
     return df
+
+
+# --------------------------
+# Servidor HTTP (Flask)
+# --------------------------
+app = Quart(__name__)
+
+
+@app.route("/create_user/<username>", methods=["POST"])
+async def http_create_user(username):
+    try:
+        body = (await request.get_json(silent=True))
+        password = body.get("password")
+
+        if not password:
+            return jsonify({"status": "ERROR", "message": "password requerido"}), 400
+
+        result = create_user(username, password)
+
+        # create_user puede devolver (uid, token) o reusar login_user si existe
+        if result is None:
+            return jsonify({"status": "ERROR", "message": "no se pudo crear/iniciar sesión"}), 400
+
+        uid, _token = result
+        return jsonify({"status": "OK", "username": username, "UID": uid}), 200
+
+    except Exception as exc:
+        return jsonify({"status": "ERROR", "message": str(exc)}), 500
+
+
+@app.route("/get_user_uid/<username>", methods=["GET"])
+async def http_get_user_uid(username):
+    try:
+        # En el cliente envían password en el body incluso en GET
+        body = (await request.get_json(silent=True))
+
+        password = body.get("password")
+
+        if not password:
+            return jsonify({"status": "ERROR", "message": "password requerido"}), 400
+
+        login = login_user(username, password)
+
+        if login is None:
+            return jsonify({"status": "ERROR", "message": "credenciales inválidas"}), 401
+
+        uid, _token = login
+        return jsonify({"status": "OK", "UID": uid}), 200
+
+    except Exception as exc:
+        return jsonify({"status": "ERROR", "message": str(exc)}), 500
+
+
+if __name__ == "__main__":
+    # Arranca el microservicio de usuarios en 0.0.0.0:5050
+    app.run(host="127.0.0.1", port=5050, debug=True)
