@@ -31,7 +31,3 @@ Hay que entregar una **memoria** (no muy larga)
 * Borrar (rm)
   * Elimina la ruta del fichero concreto
 * Leer (get_book)
-
-
-COMPROBAR 
-* En login print(user) = solucionar error 400

@@ -18,7 +18,6 @@ def create_user(username, password):
         str: The token for the newly created user.
         
     """
-    # Comprobar si el usuario ya existe (preguntar si mejor excepcion)
     if(get_user_id(username) is not False):
         return login_user(username, password)
     
@@ -34,21 +33,13 @@ def create_user(username, password):
     return uid, uuid.uuid5(Secret_uuid, uid)
 
 def login_user(username, password):
-    """
-    Log in a user with the given username and password.
-    
-    Args:
-        username (str): The username of the user.
-        password (str): The password of the user.
-        
-    Returns:
-        bool: UID and token if login is successful, None otherwise.
-    """
-
     df = open_or_create_txt()
-
-    usuario = df[(df["username"] == username) & (df["password"] == password)]
-
+    
+    usuario = df[
+        (df["username"].astype(str).str.strip() == str(username).strip()) &
+        (df["password"].astype(str).str.strip() == str(password).strip())
+    ]    
+    
     if not usuario.empty:
         uid = usuario.iloc[0]["UID"]
         return uid, uuid.uuid5(Secret_uuid, uid)
@@ -86,7 +77,7 @@ def open_or_create_txt():
 
 
 # --------------------------
-# Servidor HTTP (Flask)
+# Servidor HTTP (Quart)
 # --------------------------
 app = Quart(__name__)
 
@@ -102,7 +93,6 @@ async def http_create_user(username):
 
         result = create_user(username, password)
 
-        # create_user puede devolver (uid, token) o reusar login_user si existe
         if result is None:
             return jsonify({"status": "ERROR", "message": "no se pudo crear/iniciar sesión"}), 400
 
@@ -116,7 +106,7 @@ async def http_create_user(username):
 @app.route("/get_user_uid/<username>", methods=["GET"])
 async def http_get_user_uid(username):
     try:
-        # En el cliente envían password en el body incluso en GET
+
         body = (await request.get_json(silent=True))
 
         password = body.get("password")
@@ -137,5 +127,4 @@ async def http_get_user_uid(username):
 
 
 if __name__ == "__main__":
-    # Arranca el microservicio de usuarios en 0.0.0.0:5050
     app.run(host="127.0.0.1", port=5050, debug=True)
