@@ -37,7 +37,7 @@ print()
 print("Obteniendo UID de usuario antonio con password 1234...")
 print("Debe devolver OK y además su UID")
 
-url = url_user + "get_user_uid/antonio"
+url = url_user + "login/antonio"
 headers = {"Content-Type": "application/json"}
 data = {"password": "1234"}
 response = requests.get(url, headers=headers, data=json.dumps(data))
@@ -55,7 +55,7 @@ print()
 print("Obteniendo UID de usuario maria con password abduscan...")
 print("Debe devolver OK y además su UID")   
 
-url = url_user + "get_user_uid/maria"
+url = url_user + "login/maria"
 headers = {"Content-Type": "application/json"}
 data = {"password": "abduscan"}
 response = requests.get(url, headers=headers, data=json.dumps(data))

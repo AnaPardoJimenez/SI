@@ -1,3 +1,4 @@
 username	password	UID
 antonio	1234	9bf1fd05-e97c-4138-a25e-3e48b57a73df
 maria	abduscan	b1e00468-d422-4365-803e-77efb5be0546
+testuser	testpassword	51bca155-f265-40b6-b74a-35121f15594b
