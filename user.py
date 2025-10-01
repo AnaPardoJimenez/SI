@@ -1,5 +1,5 @@
 import pandas as pd
-import os, uuid, asyncio
+import os, uuid, asyncio, time
 from quart import Quart, jsonify, request
 
 Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
@@ -123,7 +123,7 @@ def change_pass(username: str, password: str, new_password: str):
         bool: True if success, False if failed.
     """
     df = open_users_txt()
-    if df is None: return False
+    if df is None or df.empty: return False
     
     usuario = df[
         (df["username"].astype(str).str.strip() == str(username).strip()) &
@@ -133,6 +133,8 @@ def change_pass(username: str, password: str, new_password: str):
         return False
 
     df.loc[df["username"] == username, "password"] = new_password
+    df.to_csv(users_file, sep="\t", index=False)
+    
     return True
 
 def change_username(username: str, password: str, new_username: str):
@@ -158,6 +160,8 @@ def change_username(username: str, password: str, new_username: str):
         return False
 
     df.loc[df["username"] == username, "username"] = new_username
+    df.to_csv(users_file, sep="\t", index=False)
+    
     return True
 
 def delete_user(username: str, password: str):
@@ -173,23 +177,26 @@ def delete_user(username: str, password: str):
     """
     df = open_users_txt()
     if df is None: return False
-    
+
     usuario = df[
         (df["username"].astype(str).str.strip() == str(username).strip()) &
         (df["password"].astype(str).str.strip() == str(password).strip())
     ]
+
     if usuario is None:
         return False
 
-    uid = df.loc[(df["username"] == username) & (df["password"] == password), "uid"].values
+    uid = df.loc[(df["username"] == username) & (df["password"] == password), "UID"].values[0]
     usr_lib_name = usr_lib_dir + uid + ".txt"
-    
-    if os.path.exists(usr_lib_name):
+
+    if os.path.exists(usr_lib_dir):
         os.remove(usr_lib_name)
+
         df = df[~((df["username"] == username) & (df["password"] == password))]
-        df.to_csv(users_file, index=False)
+        df.to_csv(users_file, sep="\t", index=False)
+
         return True
-    
+
     return False
 
 
@@ -213,13 +220,14 @@ async def http_create_user(username):
     """
     try:
         body = (await request.get_json(silent=True))
+        if body is None:
+            return jsonify({"status": "ERROR", "message": "body requerido"}), 401
+        
         password = body.get("password")
-
         if not password:
             return jsonify({"status": "ERROR", "message": "password requerido"}), 400
 
         result = create_user(username, password)
-
         if result is None:
             return jsonify({"status": "ERROR", "message": "no se pudo crear/iniciar sesión"}), 400
 
@@ -308,15 +316,15 @@ async def http_change_pass(username):
         new_password = body.get("new_password")
 
         if not password:
-            return jsonify({"status": "ERROR", "message": "password requerido"}), 400
+            return jsonify({"status": "ERROR", "message": "password requerido"}), 402
         
         if not new_password:
-            return jsonify({"status": "ERROR", "message": "nueva contraseña requerida"}), 400
+            return jsonify({"status": "ERROR", "message": "nueva contraseña requerida"}), 403
 
         result = change_pass(username, password, new_password)
         if result is False:
             return jsonify({"status": "ERROR", "message": "usuario no encontrado"}), 404
-        
+
         return jsonify({"status": "OK"}), 200
 
     except Exception as exc:
@@ -356,7 +364,7 @@ async def http_change_username(username):
 
 
 @app.route("/delete_user/<username>", methods=["POST"])
-async def http_delete_user():
+async def http_delete_user(username):
     """
     Eliminar usuario.
     - Body (JSON): {"password":"<password>"}
@@ -376,8 +384,8 @@ async def http_delete_user():
 
         if not password:
             return jsonify({"status": "ERROR", "message": "password requerido"}), 400
-
-        result = delete_user(password)
+        
+        result = delete_user(username, password)
         if result is False:
             return jsonify({"status": "ERROR", "message": "Not Found"}), 404
         

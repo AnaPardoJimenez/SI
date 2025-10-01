@@ -36,12 +36,13 @@ def setup_teardown():
     time.sleep(1)
     yield
     # Clean up after tests
-    cleanup_files()
+    #cleanup_files()
 
 def test_create_user():
     url = f"{BASE_URL}/create_user/{TEST_USERNAME}"
-    payload = {"password": TEST_PASSWORD}
-    response = requests.post(url, json=payload)
+    headers = {"Content-Type": "application/json"}
+    data = {"password": TEST_PASSWORD}
+    response = requests.post(url, headers=headers, data=json.dumps(data))
     
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
     data = response.json()
@@ -51,11 +52,12 @@ def test_create_user():
 
 def test_login_user():
     url = f"{BASE_URL}/login/{TEST_USERNAME}"
+    headers = {"Content-Type": "application/json"}
     payload = {"password": TEST_PASSWORD}
     # Note: The route is defined as GET, but it expects a JSON body, which is unusual for GET.
     # Using POST here might fail if server strictly enforces GET; adjust if needed.
     # In code, it's methods=["GET"], but awaits get_json(), which works in Quart but is non-standard.
-    response = requests.get(url, json=payload)  # Requests doesn't send body on GET; use post if server allows.
+    response = requests.get(url, headers=headers, data=json.dumps(payload))  # Requests doesn't send body on GET; use post if server allows.
     
     # If server enforces GET, this might need workaround; for now, assume it works or change to POST if bug.
     # Potential bug in code: change to POST for consistency.
@@ -66,7 +68,8 @@ def test_login_user():
 
 def test_get_user_id():
     url = f"{BASE_URL}/get_user_id/{TEST_USERNAME}"
-    response = requests.get(url)
+    headers = {"Content-Type": "application/json"}
+    response = requests.get(url, headers=headers)
     
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
     data = response.json()
@@ -77,7 +80,8 @@ def test_get_user_id():
 def test_change_password():
     url = f"{BASE_URL}/change_pass/{TEST_USERNAME}"
     payload = {"password": TEST_PASSWORD, "new_password": TEST_NEW_PASSWORD}
-    response = requests.post(url, json=payload)
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
     
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
     data = response.json()
@@ -86,13 +90,14 @@ def test_change_password():
     # Verify by logging in with new password
     login_url = f"{BASE_URL}/login/{TEST_USERNAME}"
     login_payload = {"password": TEST_NEW_PASSWORD}
-    login_response = requests.get(login_url, json=login_payload)
+    login_response = requests.get(login_url, headers=headers, data=json.dumps(login_payload))
     assert login_response.status_code == 200
 
 def test_change_username():
     url = f"{BASE_URL}/change_username/{TEST_USERNAME}"
     payload = {"password": TEST_NEW_PASSWORD, "new_username": TEST_NEW_USERNAME}
-    response = requests.post(url, json=payload)
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
     
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
     data = response.json()
@@ -100,13 +105,15 @@ def test_change_username():
 
     # Verify by getting new username
     get_url = f"{BASE_URL}/get_user_id/{TEST_NEW_USERNAME}"
-    get_response = requests.get(get_url)
+    headers = {"Content-Type": "application/json"}
+    get_response = requests.get(get_url, headers=headers)
     assert get_response.status_code == 200
 
 def test_delete_user():
     url = f"{BASE_URL}/delete_user/{TEST_NEW_USERNAME}"
     payload = {"password": TEST_NEW_PASSWORD}
-    response = requests.post(url, json=payload)
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
     
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
     data = response.json()
@@ -114,7 +121,8 @@ def test_delete_user():
 
     # Verify deletion by trying to get user
     get_url = f"{BASE_URL}/get_user_id/{TEST_NEW_USERNAME}"
-    get_response = requests.get(get_url)
+    headers = {"Content-Type": "application/json"}
+    get_response = requests.get(get_url, headers=headers)
     assert get_response.status_code == 404  # Should not exist now
 
 # Additional negative tests
@@ -122,24 +130,28 @@ def test_delete_user():
 def test_create_user_missing_password():
     url = f"{BASE_URL}/create_user/{TEST_USERNAME}"
     payload = {}  # No password
-    response = requests.post(url, json=payload)
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
     assert response.status_code == 400
 
 def test_login_invalid_credentials():
     url = f"{BASE_URL}/login/{TEST_USERNAME}"
     payload = {"password": "wrongpass"}
-    response = requests.get(url, json=payload)
+    headers = {"Content-Type": "application/json"}
+    response = requests.get(url, headers=headers, data=json.dumps(payload))
     assert response.status_code == 401
 
 def test_get_nonexistent_user():
     url = f"{BASE_URL}/get_user_id/nonexistentuser"
-    response = requests.get(url)
+    headers = {"Content-Type": "application/json"}
+    response = requests.get(url, headers=headers)
     assert response.status_code == 404
 
 def test_change_pass_invalid():
     url = f"{BASE_URL}/change_pass/{TEST_USERNAME}"
     payload = {"password": "wrong", "new_password": "new"}
-    response = requests.post(url, json=payload)
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
     assert response.status_code == 404  # Or 401/403 depending on impl
 
 # Run tests if executed directly
