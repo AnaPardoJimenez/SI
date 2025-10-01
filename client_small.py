@@ -63,27 +63,26 @@ print(response)
 if response.status_code == 200:
     print(response.json())
 
-#print()
-#print(" >>> TERMINA EL TEST DE user.py <<<")
-#print()
-#print(" >>> EMPIEZA EL TEST DE file.py <<<")
-#
-#print()
-#print("Creando el fichero fichero_001.txt con el contenido 'texto de prueba del fichero'")
-#print("Debe devolver OK")
-#
-#url = url_file + "create_file"
-#headers = {}
-#headers["Content-Type"] = "application/json"
-#headers["Authorization"] = "Bearer " + token
-#data = {}
-#data["uid"] = UID
-#data["filename"] = "fichero_001.txt"
-#data["content"] = "texto de prueba del fichero"
-#response = requests.post(url, headers=headers, data=json.dumps(data))
-#if response.status_code == 200:
-#    print(response.json())
-#
-#print()
-#print(" >>> TERMINA EL TEST DE file.py <<<")
-#
+print()
+print(" >>> TERMINA EL TEST DE user.py <<<")
+print()
+print(" >>> EMPIEZA EL TEST DE file.py <<<")
+
+print()
+print("Creando el fichero fichero_001.txt con el contenido 'texto de prueba del fichero'")
+print("Debe devolver OK")
+
+url = url_file + "create_file"
+headers = {}
+headers["Content-Type"] = "application/json"
+headers["Authorization"] = "Bearer " + token
+data = {}
+data["uid"] = UID
+data["filename"] = "fichero_001.txt"
+data["content"] = "texto de prueba del fichero"
+response = requests.post(url, headers=headers, data=json.dumps(data))
+if response.status_code == 200:
+    print(response.json())
+
+print()
+print(" >>> TERMINA EL TEST DE file.py <<<")

@@ -31,3 +31,34 @@ Hay que entregar una **memoria** (no muy larga)
 * Borrar (rm)
   * Elimina la ruta del fichero concreto
 * Leer (get_book)
+
+
+### Contenedores (la idea es tener esto terminado esta semana)
+Contenedor: parecido a una maquina virtual pero mucho más compacta
+  * No instalo un sistema operativo ni componente para que funcione
+  * Mayor rapidez, independencia y compatibilidad con microservicios
+Sirven para meter el microservicio a una zona independiente con los recursos que yo diga (en lugar de todos los recursos
+que ofrece el SO)
+
+#### **Comandos**:
+* **RUN** (No tenemos que usarlo en principio): 
+  1. Crea un contenedor a partir de una imagen
+  2. docker run mi_imagen python --version
+  3. -ti: no me enteré pero hace algo
+* **START/STOP**
+  1. Para o inicia un contenedor
+* **RM/RMI**
+* **PS/IMAGES**
+  1. Puede dar problemas, asique hay que borrarlo antes de entregar y volver a empezarlo (puede no funcionar y no darnos cuenta si no)
+* **EXEC**
+  1. En un contenedor que ya existe y está escuchando ejecuta un comando
+* **BUILD**
+  1. No usamos
+* **Docker file**
+  * Es lo que vamos a utilizar en lugar de build
+  * Es para definir que queremos usar en nuestro contenedor (imagen)
+  * Ejemplo en drive
+  * Añadir, quart, pandas, etc
+
+
+  |.     file/UID/nombre_archivo.extension      |.      public/private.        |.       info archivo.       |
