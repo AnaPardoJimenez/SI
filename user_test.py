@@ -19,11 +19,14 @@ USER_LIB_DIR = "resources/files/"
 
 # Helper function to clean up test files before and after tests
 def cleanup_files():
-    if os.path.exists(USERS_FILE):
+    if os.path.exists(USERS_FILE) and os.path.isfile(USERS_FILE):
         os.remove(USERS_FILE)
-    for file in os.listdir(USER_LIB_DIR):
-        if file.endswith(".txt"):
-            os.remove(os.path.join(USER_LIB_DIR, file))
+    if os.path.exists(USER_LIB_DIR) and os.path.isdir(USER_LIB_DIR):
+        for file in os.listdir(USER_LIB_DIR):
+            if file.endswith(".txt"):
+                full_path = os.path.join(USER_LIB_DIR, file)
+                if os.path.exists(full_path) and os.path.isfile(full_path):
+                    os.remove(full_path)
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_teardown():
