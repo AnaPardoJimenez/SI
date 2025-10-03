@@ -23,7 +23,7 @@ def create_file(uid, token, filename, content, visibility="private"):
     """
 
     # Excluye a los usuarios no dueños del fichero
-    if token != uuid.uuid5(Secret_uuid, uid):
+    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
         print("Token inválido")
         return
     
@@ -52,7 +52,7 @@ def list_files(uid, token = None):
         Returns:
             list: A list of filenames in the user's library.
     """
-    if token is not None and token == uuid.uuid5(Secret_uuid, uid):
+    if token is not None and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
         df = _open_library(uid)
         return df['name'].tolist()
     else:
@@ -78,12 +78,16 @@ def read_file(uid, filename, token = None):
     file_row = df[df['name'] == filename]
 
     if file_row.empty:
+        print("El fichero no existe")
         return None
     elif file_row.iloc[0]['visibility'] == 'public':
+        print("El fichero es público")
         return file_row.iloc[0]['content']
-    elif token is not None and token == uuid.uuid5(Secret_uuid, uid) and file_row.iloc[0]['visibility'] == 'private':
+    elif file_row.iloc[0]['visibility'] == 'private' and token is not None and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
+        print("El fichero es privado pero puedes leerlo")
         return file_row.iloc[0]['content']
     else:
+        print("No tienes permiso para leer este fichero")
         return None
 
 def modify_file(uid, filename, new_content, token, visibility=None):
@@ -99,10 +103,9 @@ def modify_file(uid, filename, new_content, token, visibility=None):
         Returns:
             bool: True if the file was modified successfully, False otherwise.
     """
-
-    if token != uuid.uuid5(Secret_uuid, uid):
+    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
         print("Token inválido")
-        return
+        return False
     
     df = _open_library(uid)
 
@@ -110,6 +113,8 @@ def modify_file(uid, filename, new_content, token, visibility=None):
         df.loc[df['name'] == filename, 'content'] = new_content
         if visibility is not None:
             df.loc[df['name'] == filename, 'visibility'] = visibility
+        df.to_csv(path + uid + ".txt", sep="\t", index=False)
+        return True
     else:
         print("El fichero no existe")
         return False
@@ -127,7 +132,7 @@ def remove_file(uid, filename, token):
         Returns:
             bool: True if the file was removed successfully, False otherwise.
     """
-    if token != uuid.uuid5(Secret_uuid, uid):
+    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
         print("Token inválido")
         return False
     
@@ -168,12 +173,8 @@ async def http_create_file():
     if not auth.startswith("Bearer "):
         return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
 
-    token_str = auth.split(" ", 1)[1].strip()
-    try:
-        token = uuid.UUID(token_str)
-    except ValueError:
-        return jsonify({"ok": False, "error": "Formato de token inválido"}), 401
-    
+    token = auth.split(" ", 1)[1].strip()
+
     # --- Cuerpo JSON ---
     try:
         body = (await request.get_json(silent=True))
@@ -181,7 +182,9 @@ async def http_create_file():
         uid = body.get("uid")
         filename = body.get("filename")
         content = body.get("content")
-        visibility = body.get("visibility, private")
+        visibility = body.get("visibility")
+        if(visibility is None):
+            visibility = "private"
 
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), 400
@@ -211,11 +214,7 @@ async def http_modify_file():
     if not auth.startswith("Bearer "):
         return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
 
-    token_str = auth.split(" ", 1)[1].strip()
-    try:
-        token = uuid.UUID(token_str)
-    except ValueError:
-        return jsonify({"ok": False, "error": "Formato de token inválido"}), 401
+    token = auth.split(" ", 1)[1].strip()
     
     # --- Cuerpo JSON ---
     try:
@@ -224,7 +223,9 @@ async def http_modify_file():
         uid = body.get("uid")
         filename = body.get("filename")
         new_content = body.get("new_content")
-        visibility = body.get("visibility, private")
+        visibility = body.get("visibility")
+        if(visibility is None):
+            visibility = "private"
 
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), 400
@@ -254,11 +255,7 @@ async def http_remove_file():
     if not auth.startswith("Bearer "):
         return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
 
-    token_str = auth.split(" ", 1)[1].strip()
-    try:
-        token = uuid.UUID(token_str)
-    except ValueError:
-        return jsonify({"ok": False, "error": "Formato de token inválido"}), 401
+    token = auth.split(" ", 1)[1].strip()
     
     # --- Cuerpo JSON ---
     try:
@@ -270,7 +267,7 @@ async def http_remove_file():
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), 400
     
-    if not uid or not filename is None:
+    if not uid or filename is None:
         return jsonify({
             "ok": False,
             "error": "Campos requeridos: uid, filename, content"
@@ -292,14 +289,9 @@ async def http_read_file():
     # --- Autenticación: Bearer token (en este caso no es necesaria siempre y cuando sea archivo publico)---
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
-        token_str = auth.split(" ", 1)[1].strip()
-    try:
-        if token_str:
-            token = uuid.UUID(token_str)
-        else:
-            token = None
-    except ValueError:
-        return jsonify({"ok": False, "error": "Formato de token inválido"}), 401
+        token = auth.split(" ", 1)[1].strip()
+    else:
+        token = None
     
     # --- Cuerpo JSON ---
     try:
@@ -311,35 +303,32 @@ async def http_read_file():
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), 400
     
-    if not uid or not filename is None:
+    if not uid or filename is None:
         return jsonify({
             "ok": False,
             "error": "Campos requeridos: uid, filename, content"
         }), 401
 
     try:
-        read_file(uid, filename, token)
+        content = read_file(uid, filename, token)
         return jsonify({
             "ok": True,
             "uid": uid,
             "filename": filename,
+            "content": content
         }), 200
     except Exception as e:
         # Cualquier error no controlado
         return jsonify({"ok": False, "error": str(e)}), 500
     
-@app.route("/list_files", methods=["DELETE"])
+@app.route("/list_files", methods=["GET"])
 async def http_list_files():
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
 
-    token_str = auth.split(" ", 1)[1].strip()
-    try:
-        token = uuid.UUID(token_str)
-    except ValueError:
-        return jsonify({"ok": False, "error": "Formato de token inválido"}), 401
+    token = auth.split(" ", 1)[1].strip()
     
     # --- Cuerpo JSON ---
     try:
@@ -350,17 +339,18 @@ async def http_list_files():
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), 400
     
-    if not uid is None:
+    if uid is None:
         return jsonify({
             "ok": False,
-            "error": "Campos requeridos: uid, filename, content"
+            "error": "Campos requeridos: uid"
         }), 401
 
     try:
-        list_files(uid, token)
+        files = list_files(uid, token)
         return jsonify({
             "ok": True,
             "uid": uid,
+            "files": files
         }), 200
     except Exception as e:
         # Cualquier error no controlado

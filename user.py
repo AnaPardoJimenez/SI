@@ -231,8 +231,8 @@ async def http_create_user(username):
         if result is None:
             return jsonify({"status": "ERROR", "message": "no se pudo crear/iniciar sesión"}), 400
 
-        uid, _token = result
-        return jsonify({"status": "OK", "username": username, "UID": uid}), 200
+        uid, token = result
+        return jsonify({"status": "OK", "username": username, "UID": uid, "Token": token}), 200
 
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), 500
@@ -264,8 +264,8 @@ async def http_login(username):
         if login is None:
             return jsonify({"status": "ERROR", "message": "credenciales inválidas"}), 401
 
-        uid, _token = login
-        return jsonify({"status": "OK", "UID": uid}), 200
+        uid, token = login
+        return jsonify({"status": "OK", "UID": uid, "Token": token}), 200
 
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), 500
