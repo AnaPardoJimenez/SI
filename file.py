@@ -7,10 +7,8 @@ path = "resources/files/"
 
 # TODO: Añadir comentarios funciones quart
 # TODO: Añadir control con share_token
-# TODO: testear + comprobar requisitos
-# TODO: Revisar control de errores (opcional)
 
-def create_file(uid, token, filename, content, visibility="private"):
+def create_file(uid, filename, content, visibility="private"):
     """
         Add a new file to the library of the user identified by uid.
         If the file already exists, update its content and/or visibility.
@@ -21,12 +19,6 @@ def create_file(uid, token, filename, content, visibility="private"):
             content (str): The content of the file.
             visibility (str, optional): The visibility of the file. Can be "public" or "private". Defaults to "private".
     """
-
-    # Excluye a los usuarios no dueños del fichero
-    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
-        print("Token inválido")
-        return
-    
     df = _open_library(uid)
 
     if filename in df['name'].values:
@@ -39,7 +31,7 @@ def create_file(uid, token, filename, content, visibility="private"):
     
     df.to_csv(path + uid + ".txt", sep="\t", index=False)
 
-def list_files(uid, token = None):
+def list_files(uid):
     """
         List all files in the user's library.
         If the token is provided all the files (public and private are listed).
@@ -52,11 +44,8 @@ def list_files(uid, token = None):
         Returns:
             list: A list of filenames in the user's library.
     """
-    if token is not None and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
-        df = _open_library(uid)
-        return df['name'].tolist()
-    else:
-        return None
+    df = _open_library(uid)
+    return df['name'].tolist()
 
 # Hay que permitir acceso con token o con contraseña para ficheros privados
 def read_file(uid, filename, token = None):
@@ -86,11 +75,13 @@ def read_file(uid, filename, token = None):
     elif file_row.iloc[0]['visibility'] == 'private' and token is not None and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
         print("El fichero es privado pero puedes leerlo")
         return file_row.iloc[0]['content']
+    elif file_row.iloc[0]['visibility'] == 'private' and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
+        return -1
     else:
         print("No tienes permiso para leer este fichero")
         return None
 
-def modify_file(uid, filename, new_content, token, visibility=None):
+def modify_file(uid, filename, new_content, visibility=None):
     """
         Modify the content of a file in the user's library.
         The user must provide a valid token to modify a file.
@@ -103,10 +94,6 @@ def modify_file(uid, filename, new_content, token, visibility=None):
         Returns:
             bool: True if the file was modified successfully, False otherwise.
     """
-    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
-        print("Token inválido")
-        return False
-    
     df = _open_library(uid)
 
     if filename in df['name'].values:
@@ -119,7 +106,7 @@ def modify_file(uid, filename, new_content, token, visibility=None):
         print("El fichero no existe")
         return False
 
-def remove_file(uid, filename, token):
+def remove_file(uid, filename):
     """
         Remove a file from the user's library.
         The user must provide a valid token to remove a file.
@@ -132,10 +119,6 @@ def remove_file(uid, filename, token):
         Returns:
             bool: True if the file was removed successfully, False otherwise.
     """
-    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
-        print("Token inválido")
-        return False
-    
     df = _open_library(uid)
 
     if filename in df['name'].values:
@@ -174,6 +157,9 @@ async def http_create_file():
         return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
 
     token = auth.split(" ", 1)[1].strip()
+
+    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
+        return jsonify({"ok": False, "error": "Token inválido"}), 403
 
     # --- Cuerpo JSON ---
     try:
@@ -215,6 +201,8 @@ async def http_modify_file():
         return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
 
     token = auth.split(" ", 1)[1].strip()
+    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
+        return jsonify({"ok": False, "error": "Token inválido"}), 403
     
     # --- Cuerpo JSON ---
     try:
@@ -237,7 +225,7 @@ async def http_modify_file():
         }), 401
 
     try:
-        modify_file(uid, filename, new_content, token, visibility)
+        modify_file(uid, filename, new_content, visibility)
         return jsonify({
             "ok": True,
             "uid": uid,
@@ -256,6 +244,9 @@ async def http_remove_file():
         return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
 
     token = auth.split(" ", 1)[1].strip()
+
+    if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
+        return jsonify({"ok": False, "error": "Token inválido"}), 403
     
     # --- Cuerpo JSON ---
     try:
@@ -274,7 +265,7 @@ async def http_remove_file():
         }), 401
 
     try:
-        remove_file(uid, filename, token)
+        remove_file(uid, filename)
         return jsonify({
             "ok": True,
             "uid": uid,
@@ -311,6 +302,8 @@ async def http_read_file():
 
     try:
         content = read_file(uid, filename, token)
+        if content is -1:
+            return jsonify({"ok": False, "error": "Token inválido"}), 403
         return jsonify({
             "ok": True,
             "uid": uid,
@@ -329,6 +322,9 @@ async def http_list_files():
         return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
 
     token = auth.split(" ", 1)[1].strip()
+
+    if token is not None and uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
+        return jsonify({"ok": False, "error": "Token inválido"}), 403
     
     # --- Cuerpo JSON ---
     try:
@@ -346,7 +342,7 @@ async def http_list_files():
         }), 401
 
     try:
-        files = list_files(uid, token)
+        files = list_files(uid)
         return jsonify({
             "ok": True,
             "uid": uid,

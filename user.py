@@ -225,11 +225,11 @@ async def http_create_user(username):
         
         password = body.get("password")
         if not password:
-            return jsonify({"status": "ERROR", "message": "password requerido"}), 400
+            return jsonify({"status": "ERROR", "message": "password requerido"}), 402
 
         result = create_user(username, password)
         if result is None:
-            return jsonify({"status": "ERROR", "message": "no se pudo crear/iniciar sesión"}), 400
+            return jsonify({"status": "ERROR", "message": "no se pudo crear/iniciar sesión"}), 403
 
         uid, token = result
         return jsonify({"status": "OK", "username": username, "UID": uid, "Token": token}), 200

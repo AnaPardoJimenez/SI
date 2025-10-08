@@ -55,10 +55,20 @@ que ofrece el SO)
 * **BUILD**
   1. No usamos
 * **Docker file**
+  * Eliminar huérfanos:
+    * sudo docker-compose down --remove-orphans
+  * Construir imagen:
+    * sudo docker-compose build
+  * Lanzar docker:
+    * sudo docker-compose up --build
   * Es lo que vamos a utilizar en lugar de build
   * Es para definir que queremos usar en nuestro contenedor (imagen)
   * Ejemplo en drive
   * Añadir, quart, pandas, etc
+* **Pytest - client**
+  * pytest -vv -s client.py
+    * -vv todos los detalles (-v también vale). Muestra los nombres de los tests que se ejecutan y si falla o tiene exito cada uno.
+    * -s no desactivar la captura de salida (dejar que la salida a la terminal se imprima)
 
 
   |.     file/UID/nombre_archivo.extension      |.      public/private.        |.       info archivo.       |
