@@ -1,2 +1,0 @@
-name	visibility	content
-testfile.txt	private	This is a test file.
