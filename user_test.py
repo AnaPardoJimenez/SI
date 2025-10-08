@@ -5,7 +5,7 @@ import os
 import pytest
 
 # Base URL for the server (assuming it's running locally)
-BASE_URL = "http://127.0.0.1:5050"
+BASE_URL = "http://0.0.0.0:5050"
 
 # Test data
 TEST_USERNAME = "testuser"
