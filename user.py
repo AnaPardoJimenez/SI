@@ -1,3 +1,4 @@
+from errno import errorcode
 import pandas as pd
 import os, uuid, asyncio, time
 from quart import Quart, jsonify, request
@@ -19,12 +20,16 @@ def create_user(username, password):
         tuple: (uid, token, was_created: bool) where was_created is True if new user was created
     """
     # Si el usuario ya existe, hacer login en su lugar
-    user_exists, error_code = get_user_id(username)
-    if user_exists:
+    uid, error_code = get_user_id(username)
+    print(username)
+    if error_code == 'OK':
+        print("LO ENCUENTRA")
         uid, token, login_error = login_user(username, password)
         if login_error != "OK":
             return None
         return uid, token, False  # No se creó, ya existía
+    
+    print("NO EXISTE")
     
     df = open_or_create_txt()
 
@@ -85,7 +90,7 @@ def get_user_id(username):
     Returns:
         tuple: (exists: bool, error_code: str)
             - (True, "OK") si el usuario existe
-            - (False, "OK") si el usuario no existe (pero el archivo se leyó bien)
+            - (False, "USER_NOT_FOUND") si el usuario no existe (pero el archivo se leyó bien)
             - (False, error_code) si hubo error al leer el archivo
     """
 
@@ -96,9 +101,10 @@ def get_user_id(username):
     usuario = df[df["username"] == username]
 
     if not usuario.empty:
-        return True, "OK"
+        uid = usuario.iloc[0]["UID"]
+        return uid, "OK"
     else:
-        return False, "OK"
+        return False, "USER_NOT_FOUND"
 
 def open_or_create_txt():
     """
@@ -294,6 +300,47 @@ def delete_user(username: str, password: str):
 
 
 
+def handle_file_error(error_code):
+    """
+    Convierte códigos de error de archivo en respuestas HTTP apropiadas.
+    
+    Args:
+        error_code (str): Código de error de open_users_txt()
+    
+    Returns:
+        tuple: (jsonify response, http_status_code) o None si no hay error
+    """
+    if error_code == "FILE_NOT_FOUND":
+        return jsonify({
+            'status': 'ERROR', 
+            'message': 'El archivo de usuarios no existe',
+            'details': 'El servidor no tiene el archivo users.txt'
+        }), 500
+    
+    elif error_code == "PERMISSION_DENIED":
+        return jsonify({
+            'status': 'ERROR', 
+            'message': 'Error de permisos',
+            'details': 'El servidor no tiene permisos para leer users.txt'
+        }), 500
+    
+    elif error_code == "FILE_CORRUPTED":
+        return jsonify({
+            'status': 'ERROR', 
+            'message': 'Archivo de usuarios corrupto',
+            'details': 'El archivo users.txt tiene un formato inválido o está corrupto'
+        }), 500
+    
+    elif error_code == "UNKNOWN_ERROR":
+        return jsonify({
+            'status': 'ERROR', 
+            'message': 'Error inesperado del servidor',
+            'details': 'Revisa los logs del servidor'
+        }), 500
+    
+    return None  # No hay error
+
+
 # --------------------------
 # Servidor HTTP (Quart)
 # --------------------------
@@ -307,9 +354,11 @@ async def http_create_user(username):
     - Body (JSON): {"password": "<password>"}
     - Comportamiento esperado: llamar a create_user(username, password)
     - Respuestas esperadas:
-        200: {"status":"OK", "username": username, "UID": "<uid>"}
-        400: parámetros faltantes
-        500: error interno
+        201: {"status":"OK", "username": username, "UID": "<uid>"} - Usuario creado
+        200: {"status":"OK", "username": username, "UID": "<uid>"} - Usuario ya existía, hizo login
+        401: Credenciales incorrectas (si usuario existe pero contraseña es incorrecta)
+        400: Parámetros faltantes
+        500: Error interno
     """
     try:
         body = (await request.get_json(silent=True))
@@ -360,38 +409,17 @@ async def http_login(username):
         uid, token, error_code = login_user(username, password)
         
         if error_code != "OK":
-            # Credenciales incorrectas
+            # Credenciales incorrectas (error del cliente)
             if error_code == "UNAUTHORIZED":
                 return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
             
             # Errores del servidor (archivo)
-            elif error_code == "FILE_NOT_FOUND":
-                return jsonify({
-                    'status': 'ERROR', 
-                    'message': 'El archivo de usuarios no existe',
-                    'details': 'El servidor no tiene el archivo users.txt'
-                }), 500
+            error_response = handle_file_error(error_code)
+            if error_response:
+                return error_response
             
-            elif error_code == "PERMISSION_DENIED":
-                return jsonify({
-                    'status': 'ERROR', 
-                    'message': 'Error de permisos',
-                    'details': 'El servidor no tiene permisos para leer users.txt'
-                }), 500
-            
-            elif error_code == "FILE_CORRUPTED":
-                return jsonify({
-                    'status': 'ERROR', 
-                    'message': 'Archivo de usuarios corrupto',
-                    'details': 'El archivo users.txt tiene un formato inválido o está corrupto'
-                }), 500
-            
-            elif error_code == "UNKNOWN_ERROR":
-                return jsonify({
-                    'status': 'ERROR', 
-                    'message': 'Error inesperado del servidor',
-                    'details': 'Revisa los logs del servidor para más información'
-                }), 500
+            # Error desconocido
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
 
         return jsonify({'status': 'OK', 'UID': uid, 'Token': token}), 200
 
@@ -410,43 +438,22 @@ async def http_get_user_id(username):
         500: error interno
     - Nota: get_user_id en el código actual devuelve True/False; aquí decidir si devolver UID real.
     """
-    user_exists, error_code = await asyncio.to_thread(get_user_id, username)
+    uid, error_code = get_user_id(username)
+    
+    # Si el usuario no fue encontrado (pero el archivo se leyó bien)
+    if error_code == "USER_NOT_FOUND":
+        return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), 404
     
     # Si hubo error al leer el archivo
     if error_code != "OK":
-        if error_code == "FILE_NOT_FOUND":
-            return jsonify({
-                'status': 'ERROR', 
-                'message': 'El archivo de usuarios no existe',
-                'details': 'El servidor no tiene el archivo users.txt'
-            }), 500
+        error_response = handle_file_error(error_code)
+        if error_response:
+            return error_response
         
-        elif error_code == "PERMISSION_DENIED":
-            return jsonify({
-                'status': 'ERROR', 
-                'message': 'Error de permisos',
-                'details': 'El servidor no tiene permisos para leer users.txt'
-            }), 500
-        
-        elif error_code == "FILE_CORRUPTED":
-            return jsonify({
-                'status': 'ERROR', 
-                'message': 'Archivo de usuarios corrupto',
-                'details': 'El archivo users.txt tiene un formato inválido o está corrupto'
-            }), 500
-        
-        elif error_code == "UNKNOWN_ERROR":
-            return jsonify({
-                'status': 'ERROR', 
-                'message': 'Error inesperado del servidor',
-                'details': 'Revisa los logs del servidor para más información'
-            }), 500
-    
-    # Si el usuario no existe
-    if not user_exists:
-        return jsonify({'status': 'ERROR', 'message': 'usuario no encontrado'}), 404
+        # Error desconocido
+        return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
 
-    return jsonify({'status': 'OK', 'exists': True, 'username': username}), 200
+    return jsonify({'status': 'OK', 'UID': uid, 'username': username}), 200
 
 
 # -------------------
@@ -467,34 +474,34 @@ async def http_change_pass(username):
     """
     try:
         body = (await request.get_json(silent=True))
+        if body is None:
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
 
         password = body.get("password")
         new_password = body.get("new_password")
 
         if not password:
-            return jsonify({'status': 'ERROR', 'message': 'password requerido'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
         
         if not new_password:
-            return jsonify({'status': 'ERROR', 'message': 'nueva contraseña requerida'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "new_password"'}), 400
 
         success, error_code = change_pass(username, password, new_password)
         
         if not success:
             # Errores de usuario
             if error_code == "NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'usuario no encontrado'}), 404
+                return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), 404
             elif error_code == "UNAUTHORIZED":
-                return jsonify({'status': 'ERROR', 'message': 'contraseña incorrecta'}), 401
+                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
             
             # Errores del servidor (archivo)
-            elif error_code == "FILE_NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'El archivo de usuarios no existe'}), 500
-            elif error_code == "PERMISSION_DENIED":
-                return jsonify({'status': 'ERROR', 'message': 'Error de permisos en el archivo'}), 500
-            elif error_code == "FILE_CORRUPTED":
-                return jsonify({'status': 'ERROR', 'message': 'Archivo de usuarios corrupto'}), 500
-            elif error_code == "UNKNOWN_ERROR":
-                return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
+            error_response = handle_file_error(error_code)
+            if error_response:
+                return error_response
+            
+            # Error desconocido
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
 
         return jsonify({'status': 'OK'}), 200
 
@@ -514,34 +521,34 @@ async def http_change_username(username):
     """
     try:
         body = (await request.get_json(silent=True))
+        if body is None:
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
 
         password = body.get("password")
         new_username = body.get("new_username")
 
         if not password:
-            return jsonify({'status': 'ERROR', 'message': 'password requerido'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
         
         if not new_username:
-            return jsonify({'status': 'ERROR', 'message': 'nuevo nombre de usuario requerido'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "new_username"'}), 400
 
         success, error_code = change_username(username, password, new_username)
         
         if not success:
             # Errores de usuario
             if error_code == "NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'usuario no encontrado'}), 404
+                return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), 404
             elif error_code == "UNAUTHORIZED":
-                return jsonify({'status': 'ERROR', 'message': 'contraseña incorrecta'}), 401
+                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
             
             # Errores del servidor (archivo)
-            elif error_code == "FILE_NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'El archivo de usuarios no existe'}), 500
-            elif error_code == "PERMISSION_DENIED":
-                return jsonify({'status': 'ERROR', 'message': 'Error de permisos en el archivo'}), 500
-            elif error_code == "FILE_CORRUPTED":
-                return jsonify({'status': 'ERROR', 'message': 'Archivo de usuarios corrupto'}), 500
-            elif error_code == "UNKNOWN_ERROR":
-                return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
+            error_response = handle_file_error(error_code)
+            if error_response:
+                return error_response
+            
+            # Error desconocido
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
         
         return jsonify({'status': 'OK'}), 200
 
@@ -565,32 +572,34 @@ async def http_delete_user(username):
     """
     try:
         body = (await request.get_json(silent=True))
+        if body is None:
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
 
         password = body.get("password")
 
         if not password:
-            return jsonify({'status': 'ERROR', 'message': 'password requerido'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
         
         success, error_code = delete_user(username, password)
         
         if not success:
             # Errores de usuario
             if error_code == "NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'usuario no encontrado'}), 404
+                return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), 404
             elif error_code == "UNAUTHORIZED":
-                return jsonify({'status': 'ERROR', 'message': 'contraseña incorrecta'}), 401
+                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
             
-            # Errores del servidor (archivo)
-            elif error_code == "FILE_NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'El archivo de usuarios no existe'}), 500
-            elif error_code == "PERMISSION_DENIED":
-                return jsonify({'status': 'ERROR', 'message': 'Error de permisos en el archivo'}), 500
-            elif error_code == "FILE_CORRUPTED":
-                return jsonify({'status': 'ERROR', 'message': 'Archivo de usuarios corrupto'}), 500
+            # Error específico del sistema de archivos
             elif error_code == "FILE_SYSTEM_ERROR":
                 return jsonify({'status': 'ERROR', 'message': 'Error en el sistema de archivos'}), 500
-            elif error_code == "UNKNOWN_ERROR":
-                return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
+            
+            # Errores del servidor (archivo)
+            error_response = handle_file_error(error_code)
+            if error_response:
+                return error_response
+            
+            # Error desconocido
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
         
         return jsonify({'status': 'OK'}), 200
 
@@ -599,9 +608,3 @@ async def http_delete_user(username):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=True)
-
-
-# Preguntar:  
-#   get_user_id: solo con user_name vale, no?
-#   Formato de guardado de los files (files.txt/JSON) y los users (users.txt/JSON) tiene que estar en JSON o en txt?
-#   Que es Bearer token? y como interactuan los dos microservicios?
