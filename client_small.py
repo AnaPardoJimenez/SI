@@ -16,32 +16,17 @@ url = url_user + "create_user/antonio"
 headers = {"Content-Type": "application/json"}
 data = {"password": "1234"}
 response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response)
 if response.status_code == 200:
     print(response.json())
 
 print()
-
-print("Creando usuario maria con password abduscan...")
-print("Debe devolver OK")
-url = url_user + "create_user/maria"
-headers = {"Content-Type": "application/json"}
-data = {"password": "abduscan"}
-response = requests.post(url, headers=headers, data=json.dumps(data))
-print(response)
-if response.status_code == 200:
-    print(response.json())
-
-print()
-
 print("Obteniendo UID de usuario antonio con password 1234...")
 print("Debe devolver OK y además su UID")
 
-url = url_user + "login/antonio"
+url = url_user + "get_user_uid/antonio"
 headers = {"Content-Type": "application/json"}
 data = {"password": "1234"}
 response = requests.get(url, headers=headers, data=json.dumps(data))
-print(response)
 if response.status_code == 200:
     print(response.json())
 
@@ -49,19 +34,6 @@ if response.status_code == 200:
     token = sha1(UID.encode()).hexdigest()
 else:
     raise Exception("Algo ha ido mal")
-
-print()
-
-print("Obteniendo UID de usuario maria con password abduscan...")
-print("Debe devolver OK y además su UID")   
-
-url = url_user + "login/maria"
-headers = {"Content-Type": "application/json"}
-data = {"password": "abduscan"}
-response = requests.get(url, headers=headers, data=json.dumps(data))
-print(response)
-if response.status_code == 200:
-    print(response.json())
 
 print()
 print(" >>> TERMINA EL TEST DE user.py <<<")
