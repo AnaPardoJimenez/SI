@@ -59,6 +59,10 @@ que ofrece el SO)
   * Es para definir que queremos usar en nuestro contenedor (imagen)
   * Ejemplo en drive
   * Añadir, quart, pandas, etc
+* **Pytest - client**
+  * pytest -vv -s user_test.py
+    * -vv todos los detalles (-v también vale). Muestra los nombres de los tests que se ejecutan y si falla o tiene exito cada uno.
+    * -s no desactivar la captura de salida (dejar que la salida a la terminal se imprima)
 
 
   |.     file/UID/nombre_archivo.extension      |.      public/private.        |.       info archivo.       |

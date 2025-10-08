@@ -16,10 +16,15 @@ def create_user(username, password):
         password (str): The password for the new user.
 
     Returns:
-        str: The token for the newly created user.
+        tuple: (uid, token, was_created: bool) where was_created is True if new user was created
     """
-    if(get_user_id(username) is not False):
-        return login_user(username, password)
+    # Si el usuario ya existe, hacer login en su lugar
+    user_exists, error_code = get_user_id(username)
+    if user_exists:
+        uid, token, login_error = login_user(username, password)
+        if login_error != "OK":
+            return None
+        return uid, token, False  # No se creó, ya existía
     
     df = open_or_create_txt()
 
@@ -34,7 +39,7 @@ def create_user(username, password):
     usr_lib_name = usr_lib_dir + uid + ".txt"
     df.to_csv(usr_lib_name, sep="\t", index=False)
 
-    return uid, uuid.uuid5(Secret_uuid, uid)
+    return uid, uuid.uuid5(Secret_uuid, uid), True  # Se creó nuevo usuario
 
 def login_user(username, password):
     """
@@ -45,12 +50,20 @@ def login_user(username, password):
         password (str): password
 
     Returns:
-        tuple (uid, token): uid id the user id, and token is the "access key", proof that the client is logged in.
-        If the username/password are incorrect, returns None.
+        tuple: (uid, token, error_code)
+            - (uid, token, "OK") si el login es exitoso
+            - (None, None, "FILE_NOT_FOUND") si el archivo no existe
+            - (None, None, "PERMISSION_DENIED") si no hay permisos
+            - (None, None, "FILE_CORRUPTED") si el archivo está corrupto
+            - (None, None, "UNKNOWN_ERROR") si hay otro error inesperado
+            - (None, None, "UNAUTHORIZED") si las credenciales son incorrectas
     """
-    df = open_users_txt()
-    if df is None: return None
+    df, error_code = open_users_txt()
+    # Si hubo error al abrir el archivo, devolver el error específico
+    if error_code != "OK":
+        return None, None, error_code
     
+    # Buscar el usuario con las credenciales proporcionadas
     usuario = df[
         (df["username"].astype(str).str.strip() == str(username).strip()) &
         (df["password"].astype(str).str.strip() == str(password).strip())
@@ -58,9 +71,9 @@ def login_user(username, password):
     
     if not usuario.empty:
         uid = usuario.iloc[0]["UID"]
-        return uid, uuid.uuid5(Secret_uuid, uid)
+        return uid, uuid.uuid5(Secret_uuid, uid), "OK"
     
-    return None
+    return None, None, "UNAUTHORIZED"
 
 def get_user_id(username):
     """
@@ -70,18 +83,22 @@ def get_user_id(username):
         username (str): The username of the user.
 
     Returns:
-        bool: True if user exists, False otherwise.
+        tuple: (exists: bool, error_code: str)
+            - (True, "OK") si el usuario existe
+            - (False, "OK") si el usuario no existe (pero el archivo se leyó bien)
+            - (False, error_code) si hubo error al leer el archivo
     """
 
-    df = open_users_txt()
-    if df is None: return False
+    df, error_code = open_users_txt()
+    if error_code != "OK":
+        return False, error_code
 
     usuario = df[df["username"] == username]
 
     if not usuario.empty:
-        return True
+        return True, "OK"
     else:
-        return False
+        return False, "OK"
 
 def open_or_create_txt():
     """
@@ -102,13 +119,38 @@ def open_users_txt():
     Opens the users file. Fails if it does not exist.
 
     Returns:
-        DataFrame: descriptor of the file
-        None if it fails (or the return value of failed pd.read_csv())
+        tuple: (DataFrame or None, error_code: str)
+            - (df, "OK") si todo va bien
+            - (None, "FILE_NOT_FOUND") si el archivo no existe
+            - (None, "PERMISSION_DENIED") si no hay permisos para leer
+            - (None, "FILE_CORRUPTED") si el archivo está corrupto o tiene formato inválido
+            - (None, "UNKNOWN_ERROR") para otros errores inesperados
     """
-    if os.path.exists(users_file):
-        return pd.read_csv(users_file, sep="\t")
-    else:
-        return None
+    # Verificar si el archivo existe
+    if not os.path.exists(users_file):
+        return None, "FILE_NOT_FOUND"
+    
+    # Intentar leer el archivo, capturando diferentes tipos de errores
+    try:
+        df = pd.read_csv(users_file, sep="\t")
+        return df, "OK"
+    
+    except PermissionError:
+        # No tenemos permisos para leer el archivo
+        return None, "PERMISSION_DENIED"
+    
+    except pd.errors.EmptyDataError:
+        # El archivo está vacío o corrupto
+        return None, "FILE_CORRUPTED"
+    
+    except pd.errors.ParserError:
+        # El archivo tiene un formato inválido (no se puede parsear)
+        return None, "FILE_CORRUPTED"
+    
+    except Exception as e:
+        # Cualquier otro error inesperado
+        print(f"Error inesperado al leer {users_file}: {type(e).__name__}: {e}")
+        return None, "UNKNOWN_ERROR"
 
 def change_pass(username: str, password: str, new_password: str):
     """
@@ -120,22 +162,39 @@ def change_pass(username: str, password: str, new_password: str):
         new_password (str): the new password
     
     Returns:
-        bool: True if success, False if failed.
+        tuple: (success: bool, error_code: str)
+            - (True, "OK") si se cambió correctamente
+            - (False, "NOT_FOUND") si el usuario no existe
+            - (False, "UNAUTHORIZED") si la contraseña es incorrecta
+            - (False, error_code) si hubo error al leer el archivo
     """
-    df = open_users_txt()
-    if df is None or df.empty: return False
+    df, error_code = open_users_txt()
     
+    # Si hubo error al leer el archivo, devolver ese error
+    if error_code != "OK":
+        return False, error_code
+    
+    # Verificar que el DataFrame no esté vacío
+    if df.empty:
+        return False, "NOT_FOUND"
+    
+    # Verificar si el usuario existe
+    usuario_existe = df[df["username"].astype(str).str.strip() == str(username).strip()]
+    if usuario_existe.empty:
+        return False, "NOT_FOUND"
+    
+    # Verificar si la contraseña es correcta
     usuario = df[
         (df["username"].astype(str).str.strip() == str(username).strip()) &
         (df["password"].astype(str).str.strip() == str(password).strip())
     ]
-    if usuario is None:
-        return False
+    if usuario.empty:
+        return False, "UNAUTHORIZED"
 
     df.loc[df["username"] == username, "password"] = new_password
     df.to_csv(users_file, sep="\t", index=False)
     
-    return True
+    return True, "OK"
 
 def change_username(username: str, password: str, new_username: str):
     """
@@ -147,22 +206,39 @@ def change_username(username: str, password: str, new_username: str):
         new_username (str): new user name
 
     Returns:
-        bool: True if success, False if failed
+        tuple: (success: bool, error_code: str)
+            - (True, "OK") si se cambió correctamente
+            - (False, "NOT_FOUND") si el usuario no existe
+            - (False, "UNAUTHORIZED") si la contraseña es incorrecta
+            - (False, error_code) si hubo error al leer el archivo
     """
-    df = open_users_txt()
-    if df is None: return False
+    df, error_code = open_users_txt()
     
+    # Si hubo error al leer el archivo, devolver ese error
+    if error_code != "OK":
+        return False, error_code
+    
+    # Verificar que el DataFrame no esté vacío
+    if df.empty:
+        return False, "NOT_FOUND"
+    
+    # Verificar si el usuario existe
+    usuario_existe = df[df["username"].astype(str).str.strip() == str(username).strip()]
+    if usuario_existe.empty:
+        return False, "NOT_FOUND"
+    
+    # Verificar si la contraseña es correcta
     usuario = df[
         (df["username"].astype(str).str.strip() == str(username).strip()) &
         (df["password"].astype(str).str.strip() == str(password).strip())
     ]
-    if usuario is None:
-        return False
+    if usuario.empty:
+        return False, "UNAUTHORIZED"
 
     df.loc[df["username"] == username, "username"] = new_username
     df.to_csv(users_file, sep="\t", index=False)
     
-    return True
+    return True, "OK"
 
 def delete_user(username: str, password: str):
     """
@@ -173,31 +249,48 @@ def delete_user(username: str, password: str):
         password (str): password of the user
 
     Returns:
-        bool: True if success, False if failed
+        tuple: (success: bool, error_code: str)
+            - (True, "OK") si se eliminó correctamente
+            - (False, "NOT_FOUND") si el usuario no existe
+            - (False, "UNAUTHORIZED") si la contraseña es incorrecta
+            - (False, error_code) si hubo error al leer el archivo
     """
-    df = open_users_txt()
-    if df is None: return False
+    df, error_code = open_users_txt()
+    
+    # Si hubo error al leer el archivo, devolver ese error
+    if error_code != "OK":
+        return False, error_code
 
+    # Verificar que el DataFrame no esté vacío
+    if df.empty:
+        return False, "NOT_FOUND"
+
+    # Verificar si el usuario existe
+    usuario_existe = df[df["username"].astype(str).str.strip() == str(username).strip()]
+    if usuario_existe.empty:
+        return False, "NOT_FOUND"
+
+    # Verificar si la contraseña es correcta
     usuario = df[
         (df["username"].astype(str).str.strip() == str(username).strip()) &
         (df["password"].astype(str).str.strip() == str(password).strip())
     ]
-
-    if usuario is None:
-        return False
+    if usuario.empty:
+        return False, "UNAUTHORIZED"
 
     uid = df.loc[(df["username"] == username) & (df["password"] == password), "UID"].values[0]
     usr_lib_name = usr_lib_dir + uid + ".txt"
 
     if os.path.exists(usr_lib_dir):
-        os.remove(usr_lib_name)
+        if os.path.exists(usr_lib_name):
+            os.remove(usr_lib_name)
 
         df = df[~((df["username"] == username) & (df["password"] == password))]
         df.to_csv(users_file, sep="\t", index=False)
 
-        return True
+        return True, "OK"
 
-    return False
+    return False, "FILE_SYSTEM_ERROR"
 
 
 
@@ -221,21 +314,25 @@ async def http_create_user(username):
     try:
         body = (await request.get_json(silent=True))
         if body is None:
-            return jsonify({"status": "ERROR", "message": "body requerido"}), 401
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
         
         password = body.get("password")
         if not password:
-            return jsonify({"status": "ERROR", "message": "password requerido"}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
 
         result = create_user(username, password)
         if result is None:
-            return jsonify({"status": "ERROR", "message": "no se pudo crear/iniciar sesión"}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
 
-        uid, token = result
-        return jsonify({"status": "OK", "username": username, "UID": uid, "Token": token}), 200
+        uid, token, was_created = result
+        
+        # Si se creó un nuevo usuario, devolver 201 Created
+        # Si ya existía y se hizo login, devolver 200 OK
+        status_code = 201 if was_created else 200
+        return jsonify({'status': 'OK', 'username': username, 'UID': uid, 'Token': token}), status_code
 
     except Exception as exc:
-        return jsonify({"status": "ERROR", "message": str(exc)}), 500
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
 
 @app.route("/login/<username>", methods=["GET"])
@@ -253,22 +350,53 @@ async def http_login(username):
     try:
 
         body = (await request.get_json(silent=True))
+        if body is None:
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
 
         password = body.get("password")
-
         if not password:
-            return jsonify({"status": "ERROR", "message": "password requerido"}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
 
-        login = login_user(username, password)
+        uid, token, error_code = login_user(username, password)
+        
+        if error_code != "OK":
+            # Credenciales incorrectas
+            if error_code == "UNAUTHORIZED":
+                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
+            
+            # Errores del servidor (archivo)
+            elif error_code == "FILE_NOT_FOUND":
+                return jsonify({
+                    'status': 'ERROR', 
+                    'message': 'El archivo de usuarios no existe',
+                    'details': 'El servidor no tiene el archivo users.txt'
+                }), 500
+            
+            elif error_code == "PERMISSION_DENIED":
+                return jsonify({
+                    'status': 'ERROR', 
+                    'message': 'Error de permisos',
+                    'details': 'El servidor no tiene permisos para leer users.txt'
+                }), 500
+            
+            elif error_code == "FILE_CORRUPTED":
+                return jsonify({
+                    'status': 'ERROR', 
+                    'message': 'Archivo de usuarios corrupto',
+                    'details': 'El archivo users.txt tiene un formato inválido o está corrupto'
+                }), 500
+            
+            elif error_code == "UNKNOWN_ERROR":
+                return jsonify({
+                    'status': 'ERROR', 
+                    'message': 'Error inesperado del servidor',
+                    'details': 'Revisa los logs del servidor para más información'
+                }), 500
 
-        if login is None:
-            return jsonify({"status": "ERROR", "message": "credenciales inválidas"}), 401
-
-        uid, token = login
-        return jsonify({"status": "OK", "UID": uid, "Token": token}), 200
+        return jsonify({'status': 'OK', 'UID': uid, 'Token': token}), 200
 
     except Exception as exc:
-        return jsonify({"status": "ERROR", "message": str(exc)}), 500
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
 
 @app.route("/get_user_id/<username>", methods=["GET"])
@@ -282,15 +410,43 @@ async def http_get_user_id(username):
         500: error interno
     - Nota: get_user_id en el código actual devuelve True/False; aquí decidir si devolver UID real.
     """
-    df = await asyncio.to_thread(open_users_txt)
-    if df is None:
-        return jsonify({"status": "ERROR", "message": "no hay usuarios"}), 400
+    user_exists, error_code = await asyncio.to_thread(get_user_id, username)
+    
+    # Si hubo error al leer el archivo
+    if error_code != "OK":
+        if error_code == "FILE_NOT_FOUND":
+            return jsonify({
+                'status': 'ERROR', 
+                'message': 'El archivo de usuarios no existe',
+                'details': 'El servidor no tiene el archivo users.txt'
+            }), 500
+        
+        elif error_code == "PERMISSION_DENIED":
+            return jsonify({
+                'status': 'ERROR', 
+                'message': 'Error de permisos',
+                'details': 'El servidor no tiene permisos para leer users.txt'
+            }), 500
+        
+        elif error_code == "FILE_CORRUPTED":
+            return jsonify({
+                'status': 'ERROR', 
+                'message': 'Archivo de usuarios corrupto',
+                'details': 'El archivo users.txt tiene un formato inválido o está corrupto'
+            }), 500
+        
+        elif error_code == "UNKNOWN_ERROR":
+            return jsonify({
+                'status': 'ERROR', 
+                'message': 'Error inesperado del servidor',
+                'details': 'Revisa los logs del servidor para más información'
+            }), 500
+    
+    # Si el usuario no existe
+    if not user_exists:
+        return jsonify({'status': 'ERROR', 'message': 'usuario no encontrado'}), 404
 
-    uid = await asyncio.to_thread(get_user_id, username)
-    if uid is False:
-        return jsonify({"status": "ERROR", "message": "usuario no encontrado"}), 404
-
-    return jsonify({"status": "OK", "UID": uid}), 200
+    return jsonify({'status': 'OK', 'exists': True, 'username': username}), 200
 
 
 # -------------------
@@ -316,19 +472,34 @@ async def http_change_pass(username):
         new_password = body.get("new_password")
 
         if not password:
-            return jsonify({"status": "ERROR", "message": "password requerido"}), 402
+            return jsonify({'status': 'ERROR', 'message': 'password requerido'}), 400
         
         if not new_password:
-            return jsonify({"status": "ERROR", "message": "nueva contraseña requerida"}), 403
+            return jsonify({'status': 'ERROR', 'message': 'nueva contraseña requerida'}), 400
 
-        result = change_pass(username, password, new_password)
-        if result is False:
-            return jsonify({"status": "ERROR", "message": "usuario no encontrado"}), 404
+        success, error_code = change_pass(username, password, new_password)
+        
+        if not success:
+            # Errores de usuario
+            if error_code == "NOT_FOUND":
+                return jsonify({'status': 'ERROR', 'message': 'usuario no encontrado'}), 404
+            elif error_code == "UNAUTHORIZED":
+                return jsonify({'status': 'ERROR', 'message': 'contraseña incorrecta'}), 401
+            
+            # Errores del servidor (archivo)
+            elif error_code == "FILE_NOT_FOUND":
+                return jsonify({'status': 'ERROR', 'message': 'El archivo de usuarios no existe'}), 500
+            elif error_code == "PERMISSION_DENIED":
+                return jsonify({'status': 'ERROR', 'message': 'Error de permisos en el archivo'}), 500
+            elif error_code == "FILE_CORRUPTED":
+                return jsonify({'status': 'ERROR', 'message': 'Archivo de usuarios corrupto'}), 500
+            elif error_code == "UNKNOWN_ERROR":
+                return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
 
-        return jsonify({"status": "OK"}), 200
+        return jsonify({'status': 'OK'}), 200
 
     except Exception as exc:
-        return jsonify({"status": "ERROR", "message": str(exc)}), 500
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
 
 @app.route("/change_username/<username>", methods=["POST"])
@@ -348,19 +519,34 @@ async def http_change_username(username):
         new_username = body.get("new_username")
 
         if not password:
-            return jsonify({"status": "ERROR", "message": "password requerido"}), 400
+            return jsonify({'status': 'ERROR', 'message': 'password requerido'}), 400
         
         if not new_username:
-            return jsonify({"status": "ERROR", "message": "nuevo nombre de usuario requerido"}), 400
+            return jsonify({'status': 'ERROR', 'message': 'nuevo nombre de usuario requerido'}), 400
 
-        result = change_username(username, password, new_username)
-        if result is False:
-            return jsonify({"status": "ERROR", "message": "usuario no encontrado"}), 404
+        success, error_code = change_username(username, password, new_username)
         
-        return jsonify({"status": "OK"}), 200
+        if not success:
+            # Errores de usuario
+            if error_code == "NOT_FOUND":
+                return jsonify({'status': 'ERROR', 'message': 'usuario no encontrado'}), 404
+            elif error_code == "UNAUTHORIZED":
+                return jsonify({'status': 'ERROR', 'message': 'contraseña incorrecta'}), 401
+            
+            # Errores del servidor (archivo)
+            elif error_code == "FILE_NOT_FOUND":
+                return jsonify({'status': 'ERROR', 'message': 'El archivo de usuarios no existe'}), 500
+            elif error_code == "PERMISSION_DENIED":
+                return jsonify({'status': 'ERROR', 'message': 'Error de permisos en el archivo'}), 500
+            elif error_code == "FILE_CORRUPTED":
+                return jsonify({'status': 'ERROR', 'message': 'Archivo de usuarios corrupto'}), 500
+            elif error_code == "UNKNOWN_ERROR":
+                return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
+        
+        return jsonify({'status': 'OK'}), 200
 
     except Exception as exc:
-        return jsonify({"status": "ERROR", "message": str(exc)}), 500
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
 
 @app.route("/delete_user/<username>", methods=["POST"])
@@ -383,16 +569,33 @@ async def http_delete_user(username):
         password = body.get("password")
 
         if not password:
-            return jsonify({"status": "ERROR", "message": "password requerido"}), 400
+            return jsonify({'status': 'ERROR', 'message': 'password requerido'}), 400
         
-        result = delete_user(username, password)
-        if result is False:
-            return jsonify({"status": "ERROR", "message": "Not Found"}), 404
+        success, error_code = delete_user(username, password)
         
-        return jsonify({"status": "OK"}), 200
+        if not success:
+            # Errores de usuario
+            if error_code == "NOT_FOUND":
+                return jsonify({'status': 'ERROR', 'message': 'usuario no encontrado'}), 404
+            elif error_code == "UNAUTHORIZED":
+                return jsonify({'status': 'ERROR', 'message': 'contraseña incorrecta'}), 401
+            
+            # Errores del servidor (archivo)
+            elif error_code == "FILE_NOT_FOUND":
+                return jsonify({'status': 'ERROR', 'message': 'El archivo de usuarios no existe'}), 500
+            elif error_code == "PERMISSION_DENIED":
+                return jsonify({'status': 'ERROR', 'message': 'Error de permisos en el archivo'}), 500
+            elif error_code == "FILE_CORRUPTED":
+                return jsonify({'status': 'ERROR', 'message': 'Archivo de usuarios corrupto'}), 500
+            elif error_code == "FILE_SYSTEM_ERROR":
+                return jsonify({'status': 'ERROR', 'message': 'Error en el sistema de archivos'}), 500
+            elif error_code == "UNKNOWN_ERROR":
+                return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
+        
+        return jsonify({'status': 'OK'}), 200
 
     except Exception as exc:
-        return jsonify({"status": "ERROR", "message": str(exc)}), 500
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=True)

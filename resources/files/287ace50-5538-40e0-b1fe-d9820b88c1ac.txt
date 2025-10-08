@@ -1,2 +1,0 @@
-name	visibility	content
-fichero_002.txt	public	Modificacion del fichero 002

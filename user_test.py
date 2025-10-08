@@ -44,7 +44,8 @@ def test_create_user():
     data = {"password": TEST_PASSWORD}
     response = requests.post(url, headers=headers, data=json.dumps(data))
     
-    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+    # Al crear un usuario nuevo, debe devolver 201 Created
+    assert response.status_code == 201, f"Expected 201, got {response.status_code}"
     data = response.json()
     assert data["status"] == "OK"
     assert data["username"] == TEST_USERNAME
@@ -75,7 +76,6 @@ def test_get_user_id():
     data = response.json()
     assert data["status"] == "OK"
     assert "UID" in data
-    # Note: In current code, this will return {"UID": True} due to bug in get_user_id returning bool instead of actual UID.
 
 def test_change_password():
     url = f"{BASE_URL}/change_pass/{TEST_USERNAME}"
@@ -152,7 +152,10 @@ def test_change_pass_invalid():
     payload = {"password": "wrong", "new_password": "new"}
     headers = {"Content-Type": "application/json"}
     response = requests.post(url, headers=headers, data=json.dumps(payload))
-    assert response.status_code == 404  # Or 401/403 depending on impl
+    print("\n\nHOLA\n\n")
+    # El usuario no existe después de haberlo eliminado en test anterior
+    # Por lo tanto debe devolver 404 Not Found
+    assert response.status_code == 404
 
 # Run tests if executed directly
 if __name__ == "__main__":
