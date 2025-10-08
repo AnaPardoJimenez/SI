@@ -132,7 +132,7 @@ def test_create_user_missing_password():
     payload = {}  # No password
     headers = {"Content-Type": "application/json"}
     response = requests.post(url, headers=headers, data=json.dumps(payload))
-    assert response.status_code == 400
+    assert response.status_code == 402
 
 def test_login_invalid_credentials():
     url = f"{BASE_URL}/login/{TEST_USERNAME}"

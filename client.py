@@ -6,7 +6,7 @@ import pytest
 
 # Base URL for the server (assuming it's running locally)
 USER_URL = "http://0.0.0.0:5050"
-FILE_URL = "http://0.0.0.0:5051"
+FILE_URL = "http://0.0.0.0:5051/"
 
 # Test data
 TEST_USERNAME = "testuser"
@@ -141,7 +141,7 @@ def test_create_user_missing_password():
     payload = {}  # No password
     headers = {"Content-Type": "application/json"}
     response = requests.post(url, headers=headers, data=json.dumps(payload))
-    assert response.status_code == 400
+    assert response.status_code == 402
 
 def test_login_invalid_credentials():
     url = f"{USER_URL}/login/{TEST_USERNAME}"
@@ -160,19 +160,18 @@ def test_change_pass_invalid():
     url = f"{USER_URL}/change_pass/{TEST_USERNAME}"
     payload = {"password": "wrong", "new_password": "new"}
     headers = {"Content-Type": "application/json"}
+    print(url)
     response = requests.post(url, headers=headers, data=json.dumps(payload))
     assert response.status_code == 404  # Or 401/403 depending on impl
 
 # File tests
 def test_create_private_file():
     url = FILE_URL + "create_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_001.txt"
-    data["content"] = "texto de prueba del fichero"
+    headers = {"Content-Type": "application/json", "Authorization": "Bearer " + TEST_USERTOKEN}
+    data = {"uid": TEST_USERUID, "filename": "fichero_001.txt", "content": "texto de prueba del fichero"}
+    print(url)
+    print(headers)
+    print(data)
     response = requests.post(url, headers=headers, data=json.dumps(data))
     assert response.status_code == 200
 

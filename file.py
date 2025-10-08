@@ -302,7 +302,7 @@ async def http_read_file():
 
     try:
         content = read_file(uid, filename, token)
-        if content is -1:
+        if content == -1:
             return jsonify({"ok": False, "error": "Token inválido"}), 403
         return jsonify({
             "ok": True,
