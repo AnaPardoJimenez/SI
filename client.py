@@ -6,7 +6,7 @@ import pytest
 
 # Base URL for the server (assuming it's running locally)
 USER_URL = "http://0.0.0.0:5050"
-FILE_URL = "http://0.0.0.0:5051/"
+FILE_URL = "http://0.0.0.0:5051"
 
 # Test data
 TEST_USERNAME = "testuser"
@@ -17,6 +17,7 @@ TEST_USERTOKEN = None
 TEST_USERUID = None
 TEST_UNAUTHORIZED_TOKEN = None
 TEST_UNAUTHORIZED_UID = None
+TEST_UNAUTHORIZED_USERNAME = "unauthorized_user"
 
 # Paths to resources (for cleanup)
 USERS_FILE = "resources/users.txt"
@@ -118,6 +119,131 @@ def test_change_username():
     get_response = requests.get(get_url, headers=headers)
     assert get_response.status_code == 200
 
+# File tests
+def test_create_private_file():
+    url = FILE_URL + "/create_file"
+    headers = {"Content-Type": "application/json", "Authorization": "Bearer " + TEST_USERTOKEN}
+    data = {"uid": TEST_USERUID, "filename": "fichero_001.txt", "content": "texto de prueba del fichero"}
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+    assert response.status_code == 200
+
+def test_create_public_file():
+    url = FILE_URL + "/create_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    data["content"] = "Fichero de prueba 002"
+    data["visibility"] = "public"
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+    assert response.status_code == 200
+
+def test_modify_file():
+    url = FILE_URL + "/modify_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    data["new_content"] = "Modificacion del fichero 002"
+    data["visibility"] = "public"
+    response = requests.put(url, headers=headers, data=json.dumps(data))
+    assert response.status_code == 200
+
+def test_read_file():
+    url = FILE_URL + "/read_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    response = requests.get(url, headers=headers, data=json.dumps(data))
+    assert response.status_code == 200
+
+def test_list_files():
+    url = FILE_URL + "/list_files"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    response = requests.get(url, headers=headers, data=json.dumps(data))
+    assert response.status_code == 200
+
+def test_unauthorized_private_file_read():
+    global TEST_UNAUTHORIZED_TOKEN, TEST_UNAUTHORIZED_UID
+    url = f"{USER_URL}/create_user/{TEST_UNAUTHORIZED_USERNAME}"
+    headers = {"Content-Type": "application/json"}
+    data = {"password": "password"}
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+
+    TEST_UNAUTHORIZED_TOKEN = response.json()['Token']
+    TEST_UNAUTHORIZED_UID = response.json()['UID']
+
+    url = FILE_URL + "/read_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_001.txt"
+    response = requests.get(url, headers=headers, data=json.dumps(data))
+    
+    assert response.status_code == 403
+
+def test_unauthorized_public_file_read():
+    url = FILE_URL + "/read_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    response = requests.get(url, headers=headers, data=json.dumps(data))
+    
+    assert response.status_code == 200
+
+def test_unauthorized_file_modification():
+    url = FILE_URL + "/modify_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    data["new_content"] = "Intento de modificacion no autorizado"
+    data["visibility"] = "public"
+    response = requests.put(url, headers=headers, data=json.dumps(data))
+    
+    assert response.status_code == 403
+
+def test_unauthorized_file_removal():
+    url = FILE_URL + "/remove_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    response = requests.delete(url, headers=headers, data=json.dumps(data))
+    
+    assert response.status_code == 403
+
+def test_remove_file():
+    url = FILE_URL + "/remove_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_001.txt"
+    response = requests.delete(url, headers=headers, data=json.dumps(data))
+    assert response.status_code == 200
+
 def test_delete_user():
     url = f"{USER_URL}/delete_user/{TEST_NEW_USERNAME}"
     payload = {"password": TEST_NEW_PASSWORD}
@@ -160,137 +286,8 @@ def test_change_pass_invalid():
     url = f"{USER_URL}/change_pass/{TEST_USERNAME}"
     payload = {"password": "wrong", "new_password": "new"}
     headers = {"Content-Type": "application/json"}
-    print(url)
     response = requests.post(url, headers=headers, data=json.dumps(payload))
     assert response.status_code == 404  # Or 401/403 depending on impl
-
-# File tests
-def test_create_private_file():
-    url = FILE_URL + "create_file"
-    headers = {"Content-Type": "application/json", "Authorization": "Bearer " + TEST_USERTOKEN}
-    data = {"uid": TEST_USERUID, "filename": "fichero_001.txt", "content": "texto de prueba del fichero"}
-    print(url)
-    print(headers)
-    print(data)
-    response = requests.post(url, headers=headers, data=json.dumps(data))
-    assert response.status_code == 200
-
-def test_create_public_file():
-    url = FILE_URL + "create_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_002.txt"
-    data["content"] = "Fichero de prueba 002"
-    data["visibility"] = "public"
-    response = requests.post(url, headers=headers, data=json.dumps(data))
-    assert response.status_code == 200
-
-def test_modify_file():
-    url = FILE_URL + "modify_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_002.txt"
-    data["new_content"] = "Modificacion del fichero 002"
-    data["visibility"] = "public"
-    response = requests.put(url, headers=headers, data=json.dumps(data))
-    assert response.status_code == 200
-
-def test_remove_file():
-    url = FILE_URL + "remove_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_001.txt"
-    response = requests.delete(url, headers=headers, data=json.dumps(data))
-    assert response.status_code == 200
-
-def test_read_file():
-    url = FILE_URL + "read_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_002.txt"
-    response = requests.get(url, headers=headers, data=json.dumps(data))
-    assert response.status_code == 200
-
-def test_list_files():
-    url = FILE_URL + "list_files"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    response = requests.get(url, headers=headers, data=json.dumps(data))
-    assert response.status_code == 200
-
-def test_unauthorized_private_file_read():
-    global TEST_UNAUTHORIZED_TOKEN, TEST_UNAUTHORIZED_UID
-    url = f"{USER_URL}/create_user/{"unauthorized_user"}"
-    headers = {"Content-Type": "application/json"}
-    data = {"password": "password"}
-    response = requests.post(url, headers=headers, data=json.dumps(data))
-
-    TEST_UNAUTHORIZED_TOKEN = response.json()['Token']
-    TEST_UNAUTHORIZED_UID = response.json()['UID']
-
-    url = FILE_URL + "read_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
-    data = {}
-    data["uid"] = TEST_UNAUTHORIZED_UID
-    data["filename"] = "fichero_001.txt"
-    response = requests.get(url, headers=headers, data=json.dumps(data))
-    
-    assert response.status_code == 403
-
-def test_unauthorized_public_file_read():
-    url = FILE_URL + "read_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
-    data = {}
-    data["uid"] = TEST_UNAUTHORIZED_UID
-    data["filename"] = "fichero_002.txt"
-    response = requests.get(url, headers=headers, data=json.dumps(data))
-    
-    assert response.status_code == 200
-
-def test_unauthorized_file_modification():
-    url = FILE_URL + "modify_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
-    data = {}
-    data["uid"] = TEST_UNAUTHORIZED_UID
-    data["filename"] = "fichero_002.txt"
-    data["new_content"] = "Intento de modificacion no autorizado"
-    data["visibility"] = "public"
-    response = requests.put(url, headers=headers, data=json.dumps(data))
-    
-    assert response.status_code == 403
-
-def test_unauthorized_file_removal():
-    url = FILE_URL + "remove_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
-    data = {}
-    data["uid"] = TEST_UNAUTHORIZED_UID
-    data["filename"] = "fichero_002.txt"
-    response = requests.delete(url, headers=headers, data=json.dumps(data))
-    
-    assert response.status_code == 403
 
 # Run tests if executed directly
 if __name__ == "__main__":
