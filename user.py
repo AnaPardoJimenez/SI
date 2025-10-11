@@ -1,23 +1,64 @@
-from errno import errorcode
+"""
+user.py - Sistema de Gestión de Usuarios con API REST
+
+Este módulo implementa un sistema completo de gestión de usuarios con autenticación, 
+expuesto a través de una API REST construida con Quart.
+
+Funcionalidades principales:
+    - Creación y autenticación de usuarios
+    - Gestión de contraseñas y nombres de usuario
+    - Almacenamiento persistente en archivos CSV
+    - Generación de tokens de sesión con UUID
+    - API REST con endpoints HTTP asíncronos
+
+Estructura de datos:
+    - Usuarios: almacenados en resources/users.txt
+    - Bibliotecas de usuario: almacenadas en resources/files/<uid>.txt
+
+Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
+Fecha de creación: 2025--
+Última modificación: 2025-10-11
+Versión: 3.0.0
+Python: 3.7+
+Dependencias: pandas, quart
+
+Uso:
+    python user.py
+    
+El servidor se ejecutará en http://0.0.0.0:5050
+"""
+
 import pandas as pd
-import os, uuid, asyncio, time
+import os
+import uuid
 from quart import Quart, jsonify, request
+
+# =============================================================================
+# CONFIGURACIÓN Y CONSTANTES
+# =============================================================================
 
 Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
 users_file = "resources/users.txt"
 usr_lib_dir = "resources/files/"
 
+# =============================================================================
+# FUNCIONES DE GESTIÓN DE USUARIOS
+# =============================================================================
+
 def create_user(username, password):
     """
-    Create a new user with the given username, email, and password.
+    Crea un nuevo usuario con el nombre de usuario y contraseña dados.
+    Si el usuario ya existe, intenta hacer login en su lugar.
     
     Args:
-        username (str): The username of the new user.
-        email (str): The email address of the new user.
-        password (str): The password for the new user.
+        username (str): El nombre de usuario del nuevo usuario.
+        password (str): La contraseña del nuevo usuario.
 
     Returns:
-        tuple: (uid, token, was_created: bool) where was_created is True if new user was created
+        tuple or None: 
+            - (uid, token, was_created: bool) donde was_created es True si se creó un nuevo usuario,
+              False si el usuario ya existía y se hizo login exitosamente
+            - None si el usuario existe pero las credenciales son incorrectas
     """
     # Si el usuario ya existe, hacer login en su lugar
     uid, error_code = get_user_id(username)
@@ -45,11 +86,11 @@ def create_user(username, password):
 
 def login_user(username, password):
     """
-    Logs the user in using the username and password.
+    Inicia sesión de un usuario usando nombre de usuario y contraseña.
 
     Args:
-        username (str): user name
-        password (str): password
+        username (str): Nombre de usuario.
+        password (str): Contraseña del usuario.
 
     Returns:
         tuple: (uid, token, error_code)
@@ -79,16 +120,16 @@ def login_user(username, password):
 
 def get_user_id(username):
     """
-    Retrieve the user ID for the given username.
+    Obtiene el ID de usuario (UID) para el nombre de usuario dado.
     
     Args:
-        username (str): The username of the user.
+        username (str): El nombre de usuario del usuario.
 
     Returns:
-        tuple: (exists: bool, error_code: str)
-            - (True, "OK") si el usuario existe
+        tuple: (uid o False, error_code: str)
+            - (uid, "OK") si el usuario existe
             - (False, "USER_NOT_FOUND") si el usuario no existe (pero el archivo se leyó bien)
-            - (False, error_code) si hubo error al leer el archivo
+            - (False, error_code) si hubo error al leer el archivo (FILE_NOT_FOUND, PERMISSION_DENIED, FILE_CORRUPTED, UNKNOWN_ERROR)
     """
 
     df, error_code = open_users_txt()
@@ -103,12 +144,16 @@ def get_user_id(username):
     else:
         return False, "USER_NOT_FOUND"
 
+# =============================================================================
+# FUNCIONES DE GESTIÓN DE ARCHIVOS
+# =============================================================================
+
 def open_or_create_txt():
     """
-    Opens the users file or creates it if it does not exist.
+    Abre el archivo de usuarios o lo crea si no existe.
 
     Returns: 
-        DataFrame: descriptor of the file
+        DataFrame: DataFrame con las columnas ["username", "password", "UID"]
     """
     if os.path.exists(users_file):
         return pd.read_csv(users_file, sep="\t")
@@ -119,7 +164,7 @@ def open_or_create_txt():
 
 def open_users_txt():
     """
-    Opens the users file. Fails if it does not exist.
+    Abre el archivo de usuarios. Falla si el archivo no existe.
 
     Returns:
         tuple: (DataFrame or None, error_code: str)
@@ -155,21 +200,25 @@ def open_users_txt():
         print(f"Error inesperado al leer {users_file}: {type(e).__name__}: {e}")
         return None, "UNKNOWN_ERROR"
 
+# =============================================================================
+# FUNCIONES DE MODIFICACIÓN DE USUARIOS
+# =============================================================================
+
 def change_pass(username: str, password: str, new_password: str):
     """
-    Changes the pasword of the given user.
+    Cambia la contraseña del usuario dado.
 
     Args:
-        username (str): the name of the user
-        password (str): the password of the user
-        new_password (str): the new password
+        username (str): El nombre del usuario.
+        password (str): La contraseña actual del usuario.
+        new_password (str): La nueva contraseña.
     
     Returns:
         tuple: (success: bool, error_code: str)
             - (True, "OK") si se cambió correctamente
             - (False, "NOT_FOUND") si el usuario no existe
-            - (False, "UNAUTHORIZED") si la contraseña es incorrecta
-            - (False, error_code) si hubo error al leer el archivo
+            - (False, "UNAUTHORIZED") si la contraseña actual es incorrecta
+            - (False, error_code) si hubo error al leer el archivo (FILE_NOT_FOUND, PERMISSION_DENIED, FILE_CORRUPTED, UNKNOWN_ERROR)
     """
     df, error_code = open_users_txt()
     
@@ -201,19 +250,19 @@ def change_pass(username: str, password: str, new_password: str):
 
 def change_username(username: str, password: str, new_username: str):
     """
-    Changes the user name of a given user.
+    Cambia el nombre de usuario de un usuario dado.
 
     Args:
-        username (str): user name
-        password (str): password of the user
-        new_username (str): new user name
+        username (str): El nombre de usuario actual.
+        password (str): La contraseña del usuario.
+        new_username (str): El nuevo nombre de usuario.
 
     Returns:
         tuple: (success: bool, error_code: str)
             - (True, "OK") si se cambió correctamente
             - (False, "NOT_FOUND") si el usuario no existe
             - (False, "UNAUTHORIZED") si la contraseña es incorrecta
-            - (False, error_code) si hubo error al leer el archivo
+            - (False, error_code) si hubo error al leer el archivo (FILE_NOT_FOUND, PERMISSION_DENIED, FILE_CORRUPTED, UNKNOWN_ERROR)
     """
     df, error_code = open_users_txt()
     
@@ -245,18 +294,19 @@ def change_username(username: str, password: str, new_username: str):
 
 def delete_user(username: str, password: str):
     """
-    Deletes the given user. _______________
+    Elimina el usuario dado y su archivo de biblioteca asociado.
 
     Args:
-        username (str): user name
-        password (str): password of the user
+        username (str): El nombre del usuario.
+        password (str): La contraseña del usuario.
 
     Returns:
         tuple: (success: bool, error_code: str)
             - (True, "OK") si se eliminó correctamente
             - (False, "NOT_FOUND") si el usuario no existe
             - (False, "UNAUTHORIZED") si la contraseña es incorrecta
-            - (False, error_code) si hubo error al leer el archivo
+            - (False, "FILE_SYSTEM_ERROR") si hay error accediendo al directorio de archivos
+            - (False, error_code) si hubo error al leer el archivo (FILE_NOT_FOUND, PERMISSION_DENIED, FILE_CORRUPTED, UNKNOWN_ERROR)
     """
     df, error_code = open_users_txt()
     
@@ -295,7 +345,9 @@ def delete_user(username: str, password: str):
 
     return False, "FILE_SYSTEM_ERROR"
 
-
+# =============================================================================
+# FUNCIONES AUXILIARES
+# =============================================================================
 
 def handle_file_error(error_code):
     """
@@ -337,25 +389,32 @@ def handle_file_error(error_code):
     
     return None  # No hay error
 
+# =============================================================================
+# SERVIDOR HTTP - API REST (QUART)
+# =============================================================================
 
-# --------------------------
-# Servidor HTTP (Quart)
-# --------------------------
 app = Quart(__name__)
 
+# -----------------------------------------------------------------------------
+# Endpoints de Autenticación y Creación
+# -----------------------------------------------------------------------------
 
 @app.route("/create_user/<username>", methods=["POST"])
 async def http_create_user(username):
     """
-    Crear usuario.
+    Endpoint HTTP para crear un nuevo usuario.
+    
+    - Método: POST
+    - Path: /create_user/<username>
     - Body (JSON): {"password": "<password>"}
-    - Comportamiento esperado: llamar a create_user(username, password)
+    - Comportamiento: Llama a create_user(username, password). Si el usuario ya existe, 
+                     intenta hacer login en su lugar.
     - Respuestas esperadas:
-        201: {"status":"OK", "username": username, "UID": "<uid>"} - Usuario creado
-        200: {"status":"OK", "username": username, "UID": "<uid>"} - Usuario ya existía, hizo login
-        401: Credenciales incorrectas (si usuario existe pero contraseña es incorrecta)
-        400: Parámetros faltantes
-        500: Error interno
+        201: {"status":"OK", "username": username, "UID": "<uid>", "Token": "<token>"} - Usuario creado
+        200: {"status":"OK", "username": username, "UID": "<uid>", "Token": "<token>"} - Usuario ya existía, hizo login
+        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Usuario existe pero contraseña incorrecta
+        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes o body inválido
+        500: {"status":"ERROR", "message": "..."} - Error interno del servidor
     """
     try:
         body = (await request.get_json(silent=True))
@@ -384,14 +443,17 @@ async def http_create_user(username):
 @app.route("/login/<username>", methods=["GET"])
 async def http_login(username):
     """
-    Login de usuario.
+    Endpoint HTTP para inicio de sesión de usuario.
+    
+    - Método: GET
+    - Path: /login/<username>
     - Body (JSON): {"password": "<password>"}
-    - Comportamiento esperado: llamar a login_user(username, password)
+    - Comportamiento: Llama a login_user(username, password)
     - Respuestas esperadas:
-        200: {"status":"OK", "UID":"<uid>"}
-        401: credenciales inválidas
-        400: parámetros faltantes
-        500: error interno
+        200: {"status":"OK", "UID":"<uid>", "Token": "<token>"} - Login exitoso
+        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Credenciales inválidas
+        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes
+        500: {"status":"ERROR", "message": "..."} - Error interno del servidor o problemas con el archivo
     """
     try:
 
@@ -423,17 +485,22 @@ async def http_login(username):
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
+# -----------------------------------------------------------------------------
+# Endpoints de Consulta de Usuarios
+# -----------------------------------------------------------------------------
 
 @app.route("/get_user_id/<username>", methods=["GET"])
 async def http_get_user_id(username):
     """
-    Comprobar existencia de usuario / recuperar ID.
-    - Query / Path: username
-    - Comportamiento esperado: llamar a get_user_id(username)
+    Endpoint HTTP para comprobar existencia de usuario y recuperar su ID.
+    
+    - Método: GET
+    - Path: /get_user_id/<username>
+    - Comportamiento: Llama a get_user_id(username)
     - Respuestas esperadas:
-        200: {"exists": true/false, "username": "<username>"}
-        500: error interno
-    - Nota: get_user_id en el código actual devuelve True/False; aquí decidir si devolver UID real.
+        200: {"status":"OK", "UID":"<uid>", "username": "<username>"} - Usuario encontrado
+        404: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
+        500: {"status":"ERROR", "message": "..."} - Error interno del servidor o problemas con el archivo
     """
     uid, error_code = get_user_id(username)
     
@@ -452,22 +519,25 @@ async def http_get_user_id(username):
 
     return jsonify({'status': 'OK', 'UID': uid, 'username': username}), 200
 
-
-# -------------------
-# Modificación de usuario
-# -------------------
+# -----------------------------------------------------------------------------
+# Endpoints de Modificación de Usuarios
+# -----------------------------------------------------------------------------
 
 @app.route("/change_pass/<username>", methods=["POST"])
 async def http_change_pass(username):
     """
-    Cambiar contraseña de un usuario.
-    - Body (JSON): {"password":"<current>", "new_password":"<nuevo>"}
-    - Comportamiento esperado: invocar change_pass(username, password, new_password)
+    Endpoint HTTP para cambiar la contraseña de un usuario.
+    
+    - Método: POST
+    - Path: /change_pass/<username>
+    - Body (JSON): {"password":"<contraseña_actual>", "new_password":"<nueva_contraseña>"}
+    - Comportamiento: Llama a change_pass(username, password, new_password)
     - Respuestas esperadas:
-        200: {"status":"OK"}
-        400: parámetros faltantes
-        401/403: credenciales inválidas
-        500: error interno
+        200: {"status":"OK"} - Contraseña cambiada exitosamente
+        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes
+        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Contraseña actual incorrecta
+        404: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
+        500: {"status":"ERROR", "message": "..."} - Error interno del servidor
     """
     try:
         body = (await request.get_json(silent=True))
@@ -509,12 +579,18 @@ async def http_change_pass(username):
 @app.route("/change_username/<username>", methods=["POST"])
 async def http_change_username(username):
     """
-    Cambiar nombre de usuario.
-    - Body (JSON): {"password":"<password>", "new_username":"<nuevo>"}
-    - Comportamiento esperado: invocar change_username(username, password, new_username)
+    Endpoint HTTP para cambiar el nombre de usuario.
+    
+    - Método: POST
+    - Path: /change_username/<username>
+    - Body (JSON): {"password":"<contraseña>", "new_username":"<nuevo_nombre>"}
+    - Comportamiento: Llama a change_username(username, password, new_username)
     - Respuestas esperadas:
-        200: {"status":"OK"}
-        400/401/403/500 según casos
+        200: {"status":"OK"} - Nombre de usuario cambiado exitosamente
+        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes
+        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Contraseña incorrecta
+        404: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
+        500: {"status":"ERROR", "message": "..."} - Error interno del servidor
     """
     try:
         body = (await request.get_json(silent=True))
@@ -556,16 +632,20 @@ async def http_change_username(username):
 @app.route("/delete_user/<username>", methods=["POST"])
 async def http_delete_user(username):
     """
-    Eliminar usuario.
-    - Body (JSON): {"password":"<password>"}
-    - Comportamiento esperado: invocar delete_user(username, password)
+    Endpoint HTTP para eliminar un usuario.
+    
+    - Método: POST
+    - Path: /delete_user/<username>
+    - Body (JSON): {"password":"<contraseña>"}
+    - Comportamiento: Llama a delete_user(username, password). Elimina el usuario y su archivo de biblioteca.
     - Respuestas esperadas:
-        200: {"status":"OK"}
-        400: parámetros faltantes
-        401/403: credenciales inválidas
-        404: usuario no encontrado
-        500: error interno
-    - ADVERTENCIA: operación destructiva — confirmar autenticación/autoridad.
+        200: {"status":"OK"} - Usuario eliminado exitosamente
+        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes
+        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Contraseña incorrecta
+        404: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
+        500: {"status":"ERROR", "message": "..."} - Error interno del servidor o del sistema de archivos
+    
+    ADVERTENCIA: Operación destructiva. Se elimina el usuario y todos sus archivos asociados.
     """
     try:
         body = (await request.get_json(silent=True))
@@ -602,6 +682,10 @@ async def http_delete_user(username):
 
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
+
+# =============================================================================
+# PUNTO DE ENTRADA PRINCIPAL
+# =============================================================================
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5050, debug=True)
