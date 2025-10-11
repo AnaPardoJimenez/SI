@@ -5,10 +5,7 @@ from quart import Quart, jsonify, request
 Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
 path = "resources/files/"
 
-# TODO: Añadir comentarios funciones quart
 # TODO: Añadir control con share_token
-# TODO: testear + comprobar requisitos
-# TODO: Revisar control de errores (opcional)
 
 def create_file(uid, token, filename, content, visibility="private"):
     """
@@ -168,6 +165,20 @@ app = Quart(__name__)
 
 @app.route("/create_file", methods=["POST"])
 async def http_create_file():
+    """
+        Create a new file in the user's library.
+        The user must provide a valid token to create a file.
+        The request must be a JSON object with the following fields:
+            - uid: The user ID of the user.
+            - filename: The name of the file to be created.
+            - content: The content of the file.
+            - visibility: The visibility of the file. Can be "public" or "private". Defaults to "private".
+        Returns a JSON object with the following fields:
+            - ok: True if the file was created successfully, False otherwise.
+            - uid: The user ID of the user.
+            - filename: The name of the file.
+            - visibility: The visibility of the file.
+    """
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -209,6 +220,20 @@ async def http_create_file():
     
 @app.route("/modify_file", methods=["PUT"])
 async def http_modify_file():
+    """
+        Modify the content of a file in the user's library.
+        The user must provide a valid token to modify a file.
+        The request must be a JSON object with the following fields:
+            - uid: The user ID of the user.
+            - filename: The name of the file to be modified.
+            - new_content: The new content of the file.
+            - visibility: The visibility of the file. Can be "public" or "private". Defaults to "private".
+        Returns a JSON object with the following fields:
+            - ok: True if the file was modified successfully, False otherwise.
+            - uid: The user ID of the user.
+            - filename: The name of the file.
+            - visibility: The visibility of the file.
+    """
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -255,6 +280,17 @@ async def http_modify_file():
     
 @app.route("/remove_file", methods=["DELETE"])
 async def http_remove_file():
+    """
+        Remove a file from the user's library.
+        The user must provide a valid token to remove a file.
+        The request must be a JSON object with the following fields:
+            - uid: The user ID of the user.
+            - filename: The name of the file to be removed.
+        Returns a JSON object with the following fields:
+            - ok: True if the file was removed successfully, False otherwise.
+            - uid: The user ID of the user.
+            - filename: The name of the file.
+    """
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -296,6 +332,19 @@ async def http_remove_file():
     
 @app.route("/read_file", methods=["GET"])
 async def http_read_file():
+    """
+        Read the content of a file in the user's library.
+        If the token is provided the user can read both public and private files (if theirs).
+        If the token is not provided the user can only read public files.
+        The request must be a JSON object with the following fields:
+            - uid: The user ID of the user.
+            - filename: The name of the file to be read.
+        Returns a JSON object with the following fields:
+            - ok: True if the file was read successfully, False otherwise.
+            - uid: The user ID of the user.
+            - filename: The name of the file.
+            - content: The content of the file.
+    """
     # --- Autenticación: Bearer token (en este caso no es necesaria siempre y cuando sea archivo publico)---
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
@@ -339,6 +388,17 @@ async def http_read_file():
     
 @app.route("/list_files", methods=["GET"])
 async def http_list_files():
+    """
+        List all files in the user's library.
+        If the token is provided all the files (public and private are listed).
+        If the token is not provided only public files are listed.
+        The request must be a JSON object with the following fields:
+            - uid: The user ID of the user.
+        Returns a JSON object with the following fields:
+            - ok: True if the files were listed successfully, False otherwise.
+            - uid: The user ID of the user.
+            - files: A list of filenames in the user's library.
+    """
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
