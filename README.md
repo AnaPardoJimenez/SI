@@ -109,7 +109,7 @@ sudo docker-compose up --build
 
 #### **Verificar que funciona:**
 ```bash
-# En otra terminal (mientras docker-compose está corriendo)
+# En otra terminal (mientras docker-compose está corriendo) o en la misma si se ha levantado en background (-d)
 pytest -vv -s client.py
 ```
 * `-vv`: todos los detalles (-v también vale). Muestra nombres de tests y resultado
