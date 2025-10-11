@@ -16,8 +16,8 @@ Estructura de datos:
     - Bibliotecas de usuario: almacenadas en resources/files/<uid>.txt
 
 Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
-Fecha de creación: 2025--
-Última modificación: 2025-10-11
+Fecha de creación: 14-9-2025
+Última modificación: 11-10-2025
 Versión: 3.0.0
 Python: 3.7+
 Dependencias: pandas, quart
