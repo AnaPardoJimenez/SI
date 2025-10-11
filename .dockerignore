@@ -1,0 +1,21 @@
+# Cachés de Python y tests
+__pycache__
+.pytest_cache
+
+# Control de versiones (¡importante!)
+.git
+
+# Archivos del sistema
+.DS_Store
+
+# Scripts de test
+client_small.py
+user_test.py
+file_test.py
+
+# Documentación
+Enunciado_P1.pdf
+README.md
+
+# Carpetas extra
+Docker_Profe

@@ -33,42 +33,87 @@ Hay que entregar una **memoria** (no muy larga)
 * Leer (get_book)
 
 
-### Contenedores (la idea es tener esto terminado esta semana)
-Contenedor: parecido a una maquina virtual pero mucho más compacta
+### Contenedores
+Contenedor: parecido a una máquina virtual pero mucho más compacta
   * No instalo un sistema operativo ni componente para que funcione
   * Mayor rapidez, independencia y compatibilidad con microservicios
-Sirven para meter el microservicio a una zona independiente con los recursos que yo diga (en lugar de todos los recursos
-que ofrece el SO)
+Sirven para meter el microservicio a una zona independiente con los recursos que yo diga (en lugar de todos los recursos que ofrece el SO)
 
-#### **Comandos**:
-* **RUN** (No tenemos que usarlo en principio): 
-  1. Crea un contenedor a partir de una imagen
-  2. docker run mi_imagen python --version
-  3. -ti: no me enteré pero hace algo
-* **START/STOP**
-  1. Para o inicia un contenedor
-* **RM/RMI**
-* **PS/IMAGES**
-  1. Puede dar problemas, asique hay que borrarlo antes de entregar y volver a empezarlo (puede no funcionar y no darnos cuenta si no)
-* **EXEC**
-  1. En un contenedor que ya existe y está escuchando ejecuta un comando
-* **BUILD**
-  1. No usamos
-* **Docker file**
-  * Eliminar huérfanos:
-    * sudo docker-compose down --remove-orphans
-  * Construir imagen:
-    * sudo docker-compose build
-  * Lanzar docker:
-    * sudo docker-compose up --build
-  * Es lo que vamos a utilizar en lugar de build
-  * Es para definir que queremos usar en nuestro contenedor (imagen)
-  * Ejemplo en drive
-  * Añadir, quart, pandas, etc
-* **Pytest - client**
-  * pytest -vv -s client.py
-    * -vv todos los detalles (-v también vale). Muestra los nombres de los tests que se ejecutan y si falla o tiene exito cada uno.
-    * -s no desactivar la captura de salida (dejar que la salida a la terminal se imprima)
+#### **Comandos Docker básicos:**
+* **docker run**: Crea y ejecuta un contenedor desde una imagen
+  * Ejemplo: `docker run mi_imagen python --version`
+* **docker start/stop**: Inicia o detiene un contenedor existente
+* **docker ps**: Lista contenedores en ejecución
+  * `docker ps -a`: Lista TODOS los contenedores (incluso detenidos)
+* **docker images**: Lista todas las imágenes disponibles
+* **docker rm**: Elimina contenedores
+* **docker rmi**: Elimina imágenes
+
+#### **Dockerfile:**
+Archivo que define cómo construir UNA imagen. Define:
+  * Imagen base (FROM python:3.12)
+  * Directorio de trabajo (WORKDIR /app)
+  * Copiar archivos (COPY requirements.txt)
+  * Instalar dependencias (RUN pip install -r requirements.txt)
+  * Exponer puertos (EXPOSE 5050 5051)
+  * Comando por defecto (CMD ["python"])
+
+#### **Docker Compose:**
+Herramienta para orquestar MÚLTIPLES contenedores. Lee el archivo `docker-compose.yml` y:
+  * Define múltiples servicios (user_api, file_api)
+  * Configura puertos, volúmenes, redes
+  * Levanta todo con un solo comando
+
+**Comandos principales:**
+* **Levantar servicios (construye y ejecuta):**
+  ```bash
+  sudo docker-compose up --build
+  ```
+* **Levantar en background (detached: libera la terminal tras levantar los contenedores):**
+  ```bash
+  sudo docker-compose up -d --build
+  ```
+* **Detener y limpiar:**
+  ```bash
+  sudo docker-compose down --remove-orphans
+  ```
+* **Solo construir imágenes (sin levantar):**
+  ```bash
+  sudo docker-compose build
+  ```
+  (No es necesario, `up --build` hace ambas cosas)
+
+#### **Limpieza completa (ANTES DE ENTREGAR):**
+Para asegurarse de que funciona desde cero en cualquier máquina:
+
+```bash
+# Paso 1: Detener y eliminar contenedores (incluye huérfanos)
+cd /home/juan/A3Q1/SI
+sudo docker-compose down --remove-orphans
+
+# Paso 2: Eliminar imágenes de tus servicios
+sudo docker rmi si_user_api si_file_api
+
+# Paso 3: Eliminar imagen base Python (prueba completa)
+sudo docker rmi python:3.12
+
+# Paso 4: Limpiar archivos generados por tests
+rm -f resources/users.txt
+rm -f resources/files/*.txt
+
+# Paso 5: Reconstruir y probar desde cero
+sudo docker-compose up --build
+```
+
+**Nota:** El paso 3 solo hay que hacerlo una vez para probar desde cero. Tarda minutos porque descarga python:3.12 (1.11GB).
+
+#### **Verificar que funciona:**
+```bash
+# En otra terminal (mientras docker-compose está corriendo)
+pytest -vv -s client.py
+```
+* `-vv`: todos los detalles (-v también vale). Muestra nombres de tests y resultado
+* `-s`: no desactivar la captura de salida (deja que print() se muestre en terminal)
 
 
   |.     file/UID/nombre_archivo.extension      |.      public/private.        |.       info archivo.       |
