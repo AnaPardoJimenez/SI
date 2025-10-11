@@ -1,17 +1,49 @@
-version: "3.3"
-services:
-  user_api:
-    build: . 
-    ports:
-      - "5050:5050"
-    volumes:
-      - ./:/app
-    command: python user.py
+# ==============================================================================
+# docker-compose.yml - Orquestación de Servicios de API
+# ==============================================================================
+#
+# Descripción:
+#   Archivo de configuración de Docker Compose para orquestar múltiples
+#   servicios de API (gestión de usuarios y gestión de archivos).
+#
+# Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
+# Fecha de creación: 8-10-2025
+# Última modificación: 11-10-2025
+# Versión: 1.0.0
+#
+# Servicios definidos:
+#   - user_api:  API de gestión de usuarios (puerto 5050)
+#   - file_api:  API de gestión de archivos (puerto 5051)
+#
+# Uso:
+#   Iniciar servicios:        sudo docker-compose up --build
+#   Iniciar en segundo plano: sudo docker-compose up -d --build
+#   Detener servicios:        sudo docker-compose down --remove-orphans
+#   Ver logs:                 sudo docker-compose logs -f
+#
+# ==============================================================================
 
-  file_api:
-    build: . 
+version: "3.3"
+
+services:
+  # ----------------------------------------------------------------------------
+  # Servicio: API de Gestión de Usuarios
+  # ----------------------------------------------------------------------------
+  user_api:
+    build: .                      # Construir imagen desde Dockerfile en directorio actual
     ports:
-      - "5051:5051"
+      - "5050:5050"               # Mapear puerto 5050 del host al contenedor
     volumes:
-      - ./:/app
-    command: python file.py
+      - ./:/app                   # Montar directorio actual en /app (desarrollo en tiempo real)
+    command: python user.py       # Ejecutar servidor de usuarios al iniciar contenedor
+
+  # ----------------------------------------------------------------------------
+  # Servicio: API de Gestión de Archivos
+  # ----------------------------------------------------------------------------
+  file_api:
+    build: .                      # Construir imagen desde Dockerfile en directorio actual
+    ports:
+      - "5051:5051"               # Mapear puerto 5051 del host al contenedor
+    volumes:
+      - ./:/app                   # Montar directorio actual en /app (desarrollo en tiempo real)
+    command: python file.py       # Ejecutar servidor de archivos al iniciar contenedor
