@@ -145,62 +145,6 @@ def get_user_id(username):
         return False, "USER_NOT_FOUND"
 
 # =============================================================================
-# FUNCIONES DE GESTIÓN DE ARCHIVOS
-# =============================================================================
-
-def open_or_create_txt():
-    """
-    Abre el archivo de usuarios o lo crea si no existe.
-
-    Returns: 
-        DataFrame: DataFrame con las columnas ["username", "password", "UID"]
-    """
-    if os.path.exists(users_file):
-        return pd.read_csv(users_file, sep="\t")
-    
-    df = pd.DataFrame(columns=["username", "password", "UID"])
-    df.to_csv(users_file, sep="\t", index=False)
-    return df
-
-def open_users_txt():
-    """
-    Abre el archivo de usuarios. Falla si el archivo no existe.
-
-    Returns:
-        tuple: (DataFrame or None, error_code: str)
-            - (df, "OK") si todo va bien
-            - (None, "FILE_NOT_FOUND") si el archivo no existe
-            - (None, "PERMISSION_DENIED") si no hay permisos para leer
-            - (None, "FILE_CORRUPTED") si el archivo está corrupto o tiene formato inválido
-            - (None, "UNKNOWN_ERROR") para otros errores inesperados
-    """
-    # Verificar si el archivo existe
-    if not os.path.exists(users_file):
-        return None, "FILE_NOT_FOUND"
-    
-    # Intentar leer el archivo, capturando diferentes tipos de errores
-    try:
-        df = pd.read_csv(users_file, sep="\t")
-        return df, "OK"
-    
-    except PermissionError:
-        # No tenemos permisos para leer el archivo
-        return None, "PERMISSION_DENIED"
-    
-    except pd.errors.EmptyDataError:
-        # El archivo está vacío o corrupto
-        return None, "FILE_CORRUPTED"
-    
-    except pd.errors.ParserError:
-        # El archivo tiene un formato inválido (no se puede parsear)
-        return None, "FILE_CORRUPTED"
-    
-    except Exception as e:
-        # Cualquier otro error inesperado
-        print(f"Error inesperado al leer {users_file}: {type(e).__name__}: {e}")
-        return None, "UNKNOWN_ERROR"
-
-# =============================================================================
 # FUNCIONES DE MODIFICACIÓN DE USUARIOS
 # =============================================================================
 
@@ -344,6 +288,62 @@ def delete_user(username: str, password: str):
         return True, "OK"
 
     return False, "FILE_SYSTEM_ERROR"
+
+# =============================================================================
+# FUNCIONES DE GESTIÓN DE ARCHIVOS
+# =============================================================================
+
+def open_or_create_txt():
+    """
+    Abre el archivo de usuarios o lo crea si no existe.
+
+    Returns: 
+        DataFrame: DataFrame con las columnas ["username", "password", "UID"]
+    """
+    if os.path.exists(users_file):
+        return pd.read_csv(users_file, sep="\t")
+    
+    df = pd.DataFrame(columns=["username", "password", "UID"])
+    df.to_csv(users_file, sep="\t", index=False)
+    return df
+
+def open_users_txt():
+    """
+    Abre el archivo de usuarios. Falla si el archivo no existe.
+
+    Returns:
+        tuple: (DataFrame or None, error_code: str)
+            - (df, "OK") si todo va bien
+            - (None, "FILE_NOT_FOUND") si el archivo no existe
+            - (None, "PERMISSION_DENIED") si no hay permisos para leer
+            - (None, "FILE_CORRUPTED") si el archivo está corrupto o tiene formato inválido
+            - (None, "UNKNOWN_ERROR") para otros errores inesperados
+    """
+    # Verificar si el archivo existe
+    if not os.path.exists(users_file):
+        return None, "FILE_NOT_FOUND"
+    
+    # Intentar leer el archivo, capturando diferentes tipos de errores
+    try:
+        df = pd.read_csv(users_file, sep="\t")
+        return df, "OK"
+    
+    except PermissionError:
+        # No tenemos permisos para leer el archivo
+        return None, "PERMISSION_DENIED"
+    
+    except pd.errors.EmptyDataError:
+        # El archivo está vacío o corrupto
+        return None, "FILE_CORRUPTED"
+    
+    except pd.errors.ParserError:
+        # El archivo tiene un formato inválido (no se puede parsear)
+        return None, "FILE_CORRUPTED"
+    
+    except Exception as e:
+        # Cualquier otro error inesperado
+        print(f"Error inesperado al leer {users_file}: {type(e).__name__}: {e}")
+        return None, "UNKNOWN_ERROR"
 
 # =============================================================================
 # FUNCIONES AUXILIARES
