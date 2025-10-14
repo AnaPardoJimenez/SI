@@ -62,7 +62,6 @@ def create_user(username, password):
     """
     # Si el usuario ya existe, hacer login en su lugar
     uid, error_code = get_user_id(username)
-    print(username)
     if error_code == 'OK':
         uid, token, login_error = login_user(username, password)
         if login_error != "OK":

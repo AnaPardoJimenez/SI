@@ -46,6 +46,8 @@ Sirven para meter el microservicio a una zona independiente con los recursos que
 * **docker ps**: Lista contenedores en ejecución
   * `docker ps -a`: Lista TODOS los contenedores (incluso detenidos)
 * **docker images**: Lista todas las imágenes disponibles
+* **docker network ls**: Lista todas las redes de Docker
+* **docker volume ls**: Lista todos los volúmenes de Docker
 * **docker rm**: Elimina contenedores
 * **docker rmi**: Elimina imágenes
 
@@ -98,8 +100,16 @@ sudo docker rmi si_user_api si_file_api
 sudo docker rmi python:3.12
 
 # Paso 4: Limpiar archivos generados por tests
-rm -f resources/users.txt
-rm -f resources/files/*.txt
+sudo rm -f resources/users.txt
+sudo rm -f resources/files/*.txt
+
+# Paso 4.5: Comprobar que todo está limpio
+sudo docker ps -a
+sudo docker images
+sudo docker network ls
+sudo docker volume ls
+ls -la resources/
+ls -la resources/files/
 
 # Paso 5: Reconstruir y probar desde cero
 sudo docker-compose up --build
