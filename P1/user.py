@@ -439,12 +439,12 @@ async def http_create_user(username):
         return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
 
-@app.route("/login/<username>", methods=["GET"])
+@app.route("/login/<username>", methods=["POST"])
 async def http_login(username):
     """
     Endpoint HTTP para inicio de sesión de usuario.
     
-    - Método: GET
+    - Método: POST
     - Path: /login/<username>
     - Body (JSON): {"password": "<password>"}
     - Comportamiento: Llama a login_user(username, password)
@@ -522,12 +522,12 @@ async def http_get_user_id(username):
 # Endpoints de Modificación de Usuarios
 # -----------------------------------------------------------------------------
 
-@app.route("/change_pass/<username>", methods=["POST"])
+@app.route("/change_pass/<username>", methods=["PATCH"])
 async def http_change_pass(username):
     """
     Endpoint HTTP para cambiar la contraseña de un usuario.
     
-    - Método: POST
+    - Método: PATCH
     - Path: /change_pass/<username>
     - Body (JSON): {"password":"<contraseña_actual>", "new_password":"<nueva_contraseña>"}
     - Comportamiento: Llama a change_pass(username, password, new_password)
@@ -575,12 +575,12 @@ async def http_change_pass(username):
         return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
 
-@app.route("/change_username/<username>", methods=["POST"])
+@app.route("/change_username/<username>", methods=["PATCH"])
 async def http_change_username(username):
     """
     Endpoint HTTP para cambiar el nombre de usuario.
     
-    - Método: POST
+    - Método: PATCH
     - Path: /change_username/<username>
     - Body (JSON): {"password":"<contraseña>", "new_username":"<nuevo_nombre>"}
     - Comportamiento: Llama a change_username(username, password, new_username)
@@ -628,12 +628,12 @@ async def http_change_username(username):
         return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
 
 
-@app.route("/delete_user/<username>", methods=["POST"])
+@app.route("/delete_user/<username>", methods=["DELETE"])
 async def http_delete_user(username):
     """
     Endpoint HTTP para eliminar un usuario.
     
-    - Método: POST
+    - Método: DELETE
     - Path: /delete_user/<username>
     - Body (JSON): {"password":"<contraseña>"}
     - Comportamiento: Llama a delete_user(username, password). Elimina el usuario y su archivo de biblioteca.

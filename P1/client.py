@@ -199,7 +199,7 @@ def test_login_user():
     url = f"{USER_URL}/login/{TEST_USERNAME}"
     headers = {"Content-Type": "application/json"}
     payload = {"password": TEST_PASSWORD}
-    response = requests.get(url, headers=headers, data=json.dumps(payload))
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
     #
     print("\n    Probando: Funcionamiento normal")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -207,7 +207,7 @@ def test_login_user():
     assert data["status"] == "OK"
     assert "UID" in data
 
-    response = requests.get(url, headers=headers)
+    response = requests.post(url, headers=headers)
     # Al no haber data, debe devolver 400 Bad request
     print("    Probando: Sin body")
     assert response.status_code == 400
@@ -215,7 +215,7 @@ def test_login_user():
     assert data["message"] == 'Body JSON requerido'
 
     payload = {}  # No password
-    response = requests.get(url, headers=headers, data=json.dumps(payload))
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
     # Al no haber campo de contraseña, debe devolver 400 Bad request
     print("    Probando: Sin campo de constraseña en body")
     assert response.status_code == 400
@@ -223,7 +223,7 @@ def test_login_user():
     assert data["message"] == 'Body JSON no contiene la clave "password"'
     
     payload = {"password": "wrongpass"}
-    response = requests.get(url, headers=headers, data=json.dumps(payload))
+    response = requests.post(url, headers=headers, data=json.dumps(payload))
     #
     print("    Probando: Contraseña incorrecta")
     assert response.status_code == 401
@@ -260,7 +260,7 @@ def test_change_password():
     url = f"{USER_URL}/change_pass/{TEST_USERNAME}"
     payload = {"password": TEST_PASSWORD, "new_password": TEST_NEW_PASSWORD}
     headers = {"Content-Type": "application/json"}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     
     print("\n    Probando: Funcionamiento normal")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -269,10 +269,10 @@ def test_change_password():
     # Verify by logging in with new password
     login_url = f"{USER_URL}/login/{TEST_USERNAME}"
     login_payload = {"password": TEST_NEW_PASSWORD}
-    login_response = requests.get(login_url, headers=headers, data=json.dumps(login_payload))
+    login_response = requests.post(login_url, headers=headers, data=json.dumps(login_payload))
     assert login_response.status_code == 200
 
-    response = requests.post(url, headers=headers)
+    response = requests.patch(url, headers=headers)
     # Al no haber data, debe devolver 400 Bad request
     print("    Probando: Sin body")
     assert response.status_code == 400
@@ -280,7 +280,7 @@ def test_change_password():
     assert data["message"] == 'Body JSON requerido'
 
     payload = {"new_password": TEST_NEW_PASSWORD}  # No password
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     # Al no haber campo de contraseña, debe devolver 400 Bad request
     print("    Probando: Sin campo de constraseña en body")
     assert response.status_code == 400
@@ -288,7 +288,7 @@ def test_change_password():
     assert data["message"] == 'Body JSON no contiene la clave "password"'
 
     payload = {"password": TEST_PASSWORD}  # No new password
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     # Al no haber campo de contraseña, debe devolver 400 Bad request
     print("    Probando: Sin campo de nueva constraseña en body")
     assert response.status_code == 400
@@ -296,7 +296,7 @@ def test_change_password():
     assert data["message"] == 'Body JSON no contiene la clave "new_password"'
     
     payload = {"password": TEST_PASSWORD, "new_password": TEST_NEW_PASSWORD}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     # 
     print("    Probando: Contraseña incorrecta")
     assert response.status_code == 401, f"Expected 401, got {response.status_code}"
@@ -305,7 +305,7 @@ def test_change_password():
     
     url = f"{USER_URL}/change_pass/usuario_inexistente"
     payload = {"password": "wrong", "new_password": "new"}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     # El usuario no existe, debe devolver 404 Not found
     print("    Probando: Usuario no existente")
     assert response.status_code == 404
@@ -316,7 +316,7 @@ def test_change_username():
     url = f"{USER_URL}/change_username/{TEST_USERNAME}"
     payload = {"password": TEST_NEW_PASSWORD, "new_username": TEST_NEW_USERNAME}
     headers = {"Content-Type": "application/json"}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     
     print("\n    Probando: Funcionamiento normal")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -329,7 +329,7 @@ def test_change_username():
     get_response = requests.get(get_url, headers=headers)
     assert get_response.status_code == 200
 
-    response = requests.post(url, headers=headers)
+    response = requests.patch(url, headers=headers)
     # Al no haber data, debe devolver 400 Bad request
     print("    Probando: Sin body")
     assert response.status_code == 400
@@ -337,7 +337,7 @@ def test_change_username():
     assert data["message"] == 'Body JSON requerido'
 
     payload = {"new_username": TEST_NEW_USERNAME}  # No password
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     # Al no haber campo de contraseña, debe devolver 400 Bad request
     print("    Probando: Sin campo de constraseña en body")
     assert response.status_code == 400
@@ -345,7 +345,7 @@ def test_change_username():
     assert data["message"] == 'Body JSON no contiene la clave "password"'
 
     payload = {"password": TEST_NEW_PASSWORD}  # No new username
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     # Al no haber campo de contraseña, debe devolver 400 Bad request
     print("    Probando: Sin campo de nuevo nombre de usuario en body")
     assert response.status_code == 400
@@ -354,7 +354,7 @@ def test_change_username():
     
     url = f"{USER_URL}/change_username/usuario_inexistente"
     payload = {"password": TEST_NEW_PASSWORD, "new_username": "new"}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     # El usuario no existe, debe devolver 404 Not found
     print("    Probando: Usuario no existente")
     assert response.status_code == 404
@@ -363,7 +363,7 @@ def test_change_username():
     
     url = f"{USER_URL}/change_username/{TEST_NEW_USERNAME}"
     payload = {"password": TEST_PASSWORD, "new_username": TEST_NEW_USERNAME}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
     # 
     print("    Probando: Contraseña incorrecta")
     assert response.status_code == 401, f"Expected 401, got {response.status_code}"
@@ -605,7 +605,7 @@ def test_remove_file():
 def test_delete_user():
     url = f"{USER_URL}/delete_user/{TEST_NEW_USERNAME}"
     headers = {"Content-Type": "application/json"}
-    response = requests.post(url, headers=headers)
+    response = requests.delete(url, headers=headers)
     # Al no haber data, debe devolver 400 Bad request
     print("\n    Probando: Sin body")
     assert response.status_code == 400
@@ -613,7 +613,7 @@ def test_delete_user():
     assert data["message"] == 'Body JSON requerido'
 
     payload = {}  # No password
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.delete(url, headers=headers, data=json.dumps(payload))
     # Al no haber campo de contraseña, debe devolver 400 Bad request
     print("    Probando: Sin campo de constraseña en body")
     assert response.status_code == 400
@@ -622,7 +622,7 @@ def test_delete_user():
     
     url = f"{USER_URL}/delete_user/usuario_inexistente"
     payload = {"password": TEST_NEW_PASSWORD, "new_username": "new"}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.delete(url, headers=headers, data=json.dumps(payload))
     # El usuario no existe, debe devolver 404 Not found
     print("    Probando: Usuario no existente")
     assert response.status_code == 404
@@ -631,7 +631,7 @@ def test_delete_user():
     
     url = f"{USER_URL}/delete_user/{TEST_NEW_USERNAME}"
     payload = {"password": TEST_PASSWORD, "new_username": TEST_NEW_USERNAME}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.delete(url, headers=headers, data=json.dumps(payload))
     # 
     print("    Probando: Contraseña incorrecta")
     assert response.status_code == 401, f"Expected 401, got {response.status_code}"
@@ -641,7 +641,7 @@ def test_delete_user():
     url = f"{USER_URL}/delete_user/{TEST_NEW_USERNAME}"
     payload = {"password": TEST_NEW_PASSWORD}
     headers = {"Content-Type": "application/json"}
-    response = requests.post(url, headers=headers, data=json.dumps(payload))
+    response = requests.delete(url, headers=headers, data=json.dumps(payload))
     # 
     print("    Probando: Funcionamiento normal")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
