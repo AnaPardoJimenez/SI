@@ -94,10 +94,10 @@ cd /home/juan/A3Q1/SI
 sudo docker-compose down --remove-orphans
 
 # Paso 2: Eliminar imágenes de tus servicios
-sudo docker rmi si_user_api si_file_api
+sudo docker rmi p1_user_api p1_file_api
 
 # Paso 3: Eliminar imagen base Python (prueba completa)
-sudo docker rmi python:3.12
+# sudo docker rmi python:3.12
 
 # Paso 4: Limpiar archivos generados por tests
 sudo rm -f resources/users.txt
