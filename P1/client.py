@@ -315,6 +315,80 @@ def test_list_files():
     response = requests.get(url, headers=headers, data=json.dumps(data))
     assert response.status_code == 200
 
+def test_create_and_use_share_token_private_read():
+    """
+    Crea un fichero privado, genera un share_token y verifica que permite leer el fichero
+    privado usando el share_token en el Authorization (sin el bearer del propietario).
+    """
+    url_create = FILE_URL + "/create_file"
+    headers_owner = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + TEST_USERTOKEN,
+    }
+    file_name = "fichero_share_expira.txt"
+    data_create = {"uid": TEST_USERUID, "filename": file_name, "content": "contenido temporal"}
+    response = requests.post(url_create, headers=headers_owner, data=json.dumps(data_create))
+    print("\n[share_token-exp] Crear fichero privado →", response.status_code)
+    assert response.status_code == 200
+
+    url_share = FILE_URL + "/create_share_token"
+    data_share = {"uid": TEST_USERUID, "filename": file_name, "minutes": 5}
+    response = requests.post(url_share, headers=headers_owner, data=json.dumps(data_share))
+    print("[share_token-exp] Crear share token (0m) →", response.status_code, response.text)
+    assert response.status_code == 200
+    share_token = response.json()["share_token"]
+    print(share_token)
+
+    # Intenta leer con el share token caducado
+    url_read = FILE_URL + "/read_file"
+    headers_share = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + share_token,
+    }
+    data_read = {"uid": TEST_USERUID, "filename": file_name}
+    response = requests.get(url_read, headers=headers_share, data=json.dumps(data_read))
+    print("[share_token-exp] Leer privado con share token caducado →", response.status_code, response.text)
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+
+def test_expired_share_token_denied_read():
+    """
+    Genera un share_token con caducidad inmediata y comprueba que, tras esperar un momento,
+    NO permite leer el fichero privado.
+    """
+    # Asegura que el fichero existe
+    url_create = FILE_URL + "/create_file"
+    headers_owner = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + TEST_USERTOKEN,
+    }
+    file_name = "fichero_share_expira.txt"
+    data_create = {"uid": TEST_USERUID, "filename": file_name, "content": "contenido temporal"}
+    response = requests.post(url_create, headers=headers_owner, data=json.dumps(data_create))
+    print("\n[share_token-exp] Crear fichero privado →", response.status_code)
+    assert response.status_code == 200
+
+    # Crea un share token con 0 minutos de validez (expira enseguida)
+    url_share = FILE_URL + "/create_share_token"
+    data_share = {"uid": TEST_USERUID, "filename": file_name, "minutes": 0}
+    response = requests.post(url_share, headers=headers_owner, data=json.dumps(data_share))
+    print("[share_token-exp] Crear share token (0m) →", response.status_code, response.text)
+    assert response.status_code == 200
+    share_token = response.json()["share_token"]
+
+    # Espera a que el timestamp actual supere el de exp (redondeado a segundos)
+    time.sleep(2)
+
+    # Intenta leer con el share token caducado
+    url_read = FILE_URL + "/read_file"
+    headers_share = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + share_token,
+    }
+    data_read = {"uid": TEST_USERUID, "filename": file_name}
+    response = requests.get(url_read, headers=headers_share, data=json.dumps(data_read))
+    print("[share_token-exp] Leer privado con share token caducado →", response.status_code, response.text)
+    assert response.status_code == 403, f"Expected 403, got {response.status_code}"
+
 def test_unauthorized_private_file_read():
     global TEST_UNAUTHORIZED_TOKEN, TEST_UNAUTHORIZED_UID
     url = f"{USER_URL}/create_user/{TEST_UNAUTHORIZED_USERNAME}"

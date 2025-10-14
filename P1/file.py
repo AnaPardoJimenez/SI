@@ -1,11 +1,11 @@
 import pandas as pd
 import os, uuid
+import re
 from quart import Quart, jsonify, request
+from datetime import datetime, timedelta, timezone
 
 Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
 path = "resources/files/"
-
-# TODO: Añadir control con share_token
 
 def create_file(uid, token, filename, content, visibility="private"):
     """
@@ -40,7 +40,6 @@ def list_files(uid, token = None):
     """
         List all files in the user's library.
         If the token is provided all the files (public and private are listed).
-        If the token is not provided only public files are listed.
 
         Args:
             uid (str): The user ID of the user.
@@ -60,7 +59,8 @@ def read_file(uid, filename, token = None):
     """
         Read the content of a file in the user's library.
         If the token is provided the user can read both public and private files.
-        If the token is not provided the user can only read public files.
+        If the token is not provided the user can only read public files unless it provides
+        a valid share token.
 
         Args:
             uid (str): The user ID of the user.
@@ -80,9 +80,23 @@ def read_file(uid, filename, token = None):
     elif file_row.iloc[0]['visibility'] == 'public':
         print("El fichero es público")
         return file_row.iloc[0]['content']
-    elif file_row.iloc[0]['visibility'] == 'private' and token is not None and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
-        print("El fichero es privado pero puedes leerlo")
-        return file_row.iloc[0]['content']
+    elif file_row.iloc[0]['visibility'] == 'private' and token is not None:
+        token = token.strip()
+
+        if token.count(".") >= 3 and _check_share_token(filename, token, uid):
+            print("El fichero es privado pero puedes leerlo (share token)")
+            return file_row.iloc[0]['content']
+
+        try:
+            if token.count(".") < 3 and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
+                print("El fichero es privado pero puedes leerlo (owner)")
+                return file_row.iloc[0]['content']
+        except Exception:
+            pass
+
+        print("No tienes permiso para leer este fichero")
+        print(token)
+        return None
     else:
         print("No tienes permiso para leer este fichero")
         return None
@@ -154,9 +168,80 @@ def _open_library(uid):
         Returns:
             pd.DataFrame: The user's library as a pandas DataFrame.
     """
-    lib_name = path + uid + ".txt"
-    df = pd.read_csv(lib_name, sep="\t")
-    return df
+    lib_name = os.path.join(path, uid + ".txt")
+    if not os.path.exists(lib_name):
+        return pd.DataFrame(columns=["name", "visibility", "content"])
+    return pd.read_csv(lib_name, sep="\t")
+
+
+def _create_share_token(minutes: int, uid: str, login_token: str, filename: str) -> str:
+    """
+        Private function to create a share token 
+
+        Args:
+            minutes (int): number of minutes that the link will be valid
+            uid (str): id of the user
+            login_token (str): token of the user 
+            filename (str): name of the file to share
+
+        Returns:
+            The shared token with format UID.nombre.exp.hash where hash 
+            is the previous information as sha-1
+    """
+    if uuid.UUID(login_token) != uuid.uuid5(Secret_uuid, uid):
+        return None
+    df = _open_library(uid)
+    if df[df['name'] == filename].empty:
+        return None  # no existe el fichero
+
+    exp_ts = int((datetime.now(timezone.utc) + timedelta(minutes=minutes)).timestamp())
+    signature = uuid.uuid5(Secret_uuid, f"{uid}.{filename}.{exp_ts}")
+    return f"{uid}.{filename}.{exp_ts}.{signature}"
+
+def _check_share_token(file_name: str, share_token: str, user: str) -> bool:
+    """
+        Function to check if a share token is valid
+
+        Args: 
+            file_name (str): name of the file to share
+            share_token (str): the share token
+            user (str): uid of the owner of the file
+        
+        Returns: 
+            True if valid, False otherwise
+    """
+    share_token = share_token.strip()
+
+    first_dot = share_token.find(".")
+    if first_dot <= 0:
+        return False
+    uid_tk = share_token[:first_dot]
+    rest = share_token[first_dot + 1:]
+
+    try:
+        filename_tk, exp_str, sig_str = rest.rsplit(".", 2)
+        exp_ts = int(exp_str)
+    except Exception:
+        return False  
+
+    if uid_tk != user or filename_tk != file_name:
+        return False
+
+    df = _open_library(uid_tk)
+    if df[df['name'] == filename_tk].empty:
+        return False
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    if now_ts > exp_ts:
+        return False
+
+    expected = uuid.uuid5(Secret_uuid, f"{uid_tk}.{filename_tk}.{exp_ts}")
+    try:
+        provided = uuid.UUID(sig_str.strip())
+    except Exception:
+        return False
+
+    return str(expected) == str(provided)
 
 # --------------------------
 # Servidor HTTP (Quart)
@@ -431,7 +516,38 @@ async def http_list_files():
     except Exception as e:
         # Cualquier error no controlado
         return jsonify({"ok": False, "error": str(e)}), 500
-    
+
+@app.route("/create_share_token", methods=["POST"])
+async def http_create_share_token():
+    """
+        Creates a valid share token if the uid passed and token verify
+        The request must be a JSON object with the following fields:
+            - uid: The user ID
+            - filename: The file to share
+            - minutes: The number of minutes that the link will be valid
+        Returns a JSON object with the following fields:
+            - ok: True is the share token was created successfully
+            - share_token: the share token created
+    """
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 401
+    login_token = auth.split(" ", 1)[1].strip()
+
+    body = (await request.get_json(silent=True)) or {}
+    uid = body.get("uid")
+    filename = body.get("filename")
+    minutes = body.get("minutes", 1)
+
+    if not uid or not filename:
+        return jsonify({"ok": False, "error": "Campos requeridos: uid, filename"}), 401
+
+    share = _create_share_token(minutes, uid, login_token, filename)
+    if not share:
+        return jsonify({"ok": False, "error": "No se pudo crear el enlace (token inválido o fichero inexistente)"}), 403
+
+    return jsonify({"ok": True, "share_token": share}), 200
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5051, debug=True)
     
