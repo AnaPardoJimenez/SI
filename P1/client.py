@@ -1,14 +1,61 @@
+"""
+client.py - Cliente de Pruebas para Sistema de Gestión de Usuarios y Archivos
+
+Este módulo implementa un cliente de pruebas completo para el sistema de gestión de usuarios 
+y archivos, utilizando pytest para realizar pruebas automatizadas de todos los endpoints 
+de la API REST.
+
+Funcionalidades principales:
+    - Pruebas de autenticación y gestión de usuarios (crear, login, modificar, eliminar)
+    - Pruebas de gestión de archivos (crear, leer, modificar, eliminar, listar)
+    - Pruebas de tokens de compartición temporal
+    - Pruebas de permisos y autorización
+    - Limpieza automática de archivos de prueba
+    - Validación de respuestas HTTP y códigos de estado
+
+Estructura de pruebas:
+    - Test de creación de usuarios con diferentes escenarios
+    - Test de autenticación y login
+    - Test de modificación de datos de usuario
+    - Test de gestión completa de archivos
+    - Test de tokens de compartición con expiración
+    - Test de permisos y acceso no autorizado
+
+Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
+Fecha de creación: 14-9-2025
+Última modificación: 11-10-2025
+Versión: 3.0.0
+Python: 3.7+
+Dependencias: requests, pytest, json, time, os
+
+Uso:
+    python client.py
+    o
+    pytest client.py
+    
+Las pruebas requieren que los servidores user.py (puerto 5050) y file.py (puerto 5051) 
+estén ejecutándose.
+"""
+
 import requests
 import json
 import time
 import os
 import pytest
 
-# Base URL for the server (assuming it's running locally)
+# =============================================================================
+# CONFIGURACIÓN Y CONSTANTES
+# =============================================================================
+
+# URLs base para los servidores (asumiendo que están ejecutándose localmente)
 USER_URL = "http://0.0.0.0:5050"
 FILE_URL = "http://0.0.0.0:5051"
 
-# Test data
+# =============================================================================
+# DATOS DE PRUEBA Y CONFIGURACIÓN
+# =============================================================================
+
+# Datos de prueba para usuarios
 TEST_USERNAME = "testuser"
 TEST_PASSWORD = "testpass"
 TEST_NEW_PASSWORD = "newtestpass"
@@ -19,33 +66,78 @@ TEST_UNAUTHORIZED_TOKEN = None
 TEST_UNAUTHORIZED_UID = None
 TEST_UNAUTHORIZED_USERNAME = "unauthorized_user"
 
-# Paths to resources (for cleanup)
+# Rutas a recursos (para limpieza)
 USERS_FILE = "resources/users.txt"
 USER_LIB_DIR = "resources/files/"
 
-# Helper function to clean up test files before and after tests
+# =============================================================================
+# FUNCIONES AUXILIARES
+# =============================================================================
+
 def cleanup_files():
-    # Remove the users file if it exists
+    """
+    Función auxiliar para limpiar archivos de prueba antes y después de las pruebas.
+    
+    Elimina el archivo de usuarios y todos los archivos .txt dentro del directorio 
+    de bibliotecas de usuario, pero preserva la estructura de directorios.
+
+    Returns:
+        None: La función no retorna valor, pero limpia los archivos en disco.
+    """
+    # Elimina el archivo de usuarios si existe
     if os.path.exists(USERS_FILE) and os.path.isfile(USERS_FILE):
         os.remove(USERS_FILE)
-    # Remove only .txt files inside the user library directory, but not the directory itself
+    
+    # Elimina solo archivos .txt dentro del directorio de bibliotecas de usuario, 
+    # pero no el directorio en sí
     if os.path.exists(USER_LIB_DIR) and os.path.isdir(USER_LIB_DIR):
         for file in os.listdir(USER_LIB_DIR):
             full_path = os.path.join(USER_LIB_DIR, file)
             if os.path.isfile(full_path) and file.endswith(".txt"):
                 os.remove(full_path)
 
+# =============================================================================
+# CONFIGURACIÓN DE PRUEBAS (PYTEST FIXTURES)
+# =============================================================================
+
 @pytest.fixture(scope="module", autouse=True)
 def setup_teardown():
-    # Clean up before tests
+    """
+    Fixture de pytest para configuración y limpieza de pruebas.
+    
+    Se ejecuta automáticamente antes y después de todas las pruebas del módulo.
+    Limpia archivos de prueba antes de comenzar y espera un momento para que 
+    los servidores estén listos.
+
+    Yields:
+        None: La función no retorna valor, pero maneja el ciclo de vida de las pruebas.
+    """
+    # Limpia archivos antes de las pruebas
     cleanup_files()
-    # Wait a bit for server to be ready (if needed)
+    
+    # Espera un momento para que el servidor esté listo (si es necesario)
     time.sleep(1)
+    
     yield
-    # Clean up after tests
+    
+    # Limpia archivos después de las pruebas (comentado para inspección manual)
     #cleanup_files()
 
+# =============================================================================
+# PRUEBAS DE GESTIÓN DE USUARIOS
+# =============================================================================
+
 def test_create_user():
+    """
+    Prueba la creación de usuarios y diferentes escenarios de error.
+    
+    Verifica:
+    - Creación exitosa de usuario nuevo (código 201)
+    - Intento de crear usuario existente (debe hacer login, código 200)
+    - Errores de validación (sin body, sin contraseña, contraseña incorrecta)
+    
+    Actualiza las variables globales TEST_USERTOKEN y TEST_USERUID.
+    """
     global TEST_USERTOKEN, TEST_USERUID
     url = f"{USER_URL}/create_user/{TEST_USERNAME}"
     headers = {"Content-Type": "application/json"}
@@ -96,6 +188,14 @@ def test_create_user():
     assert data["message"] == 'Credenciales incorrectas'
 
 def test_login_user():
+    """
+    Prueba el inicio de sesión de usuarios y diferentes escenarios de error.
+    
+    Verifica:
+    - Login exitoso con credenciales válidas (código 200)
+    - Errores de validación (sin body, sin contraseña)
+    - Login fallido con credenciales incorrectas (código 401)
+    """
     url = f"{USER_URL}/login/{TEST_USERNAME}"
     headers = {"Content-Type": "application/json"}
     payload = {"password": TEST_PASSWORD}
@@ -147,6 +247,16 @@ def test_get_user_id():
     assert response.status_code == 404
 
 def test_change_password():
+    """
+    Prueba el cambio de contraseña de usuarios y diferentes escenarios de error.
+    
+    Verifica:
+    - Cambio exitoso de contraseña (código 200)
+    - Validación del cambio mediante nuevo login
+    - Errores de validación (sin body, sin campos requeridos)
+    - Cambio fallido con credenciales incorrectas (código 401)
+    - Cambio fallido para usuario inexistente (código 404)
+    """
     url = f"{USER_URL}/change_pass/{TEST_USERNAME}"
     payload = {"password": TEST_PASSWORD, "new_password": TEST_NEW_PASSWORD}
     headers = {"Content-Type": "application/json"}
@@ -260,8 +370,16 @@ def test_change_username():
     data = response.json()
     assert data["message"] == "Credenciales incorrectas"
 
-# File tests
+# =============================================================================
+# PRUEBAS DE GESTIÓN DE ARCHIVOS
+# =============================================================================
+
 def test_create_private_file():
+    """
+    Prueba la creación de archivos privados.
+    
+    Verifica la creación exitosa de un archivo con visibilidad privada.
+    """
     url = FILE_URL + "/create_file"
     headers = {"Content-Type": "application/json", "Authorization": "Bearer " + TEST_USERTOKEN}
     data = {"uid": TEST_USERUID, "filename": "fichero_001.txt", "content": "texto de prueba del fichero"}
@@ -269,6 +387,11 @@ def test_create_private_file():
     assert response.status_code == 200
 
 def test_create_public_file():
+    """
+    Prueba la creación de archivos públicos.
+    
+    Verifica la creación exitosa de un archivo con visibilidad pública.
+    """
     url = FILE_URL + "/create_file"
     headers = {}
     headers["Content-Type"] = "application/json"
@@ -315,10 +438,16 @@ def test_list_files():
     response = requests.get(url, headers=headers, data=json.dumps(data))
     assert response.status_code == 200
 
+# =============================================================================
+# PRUEBAS DE TOKENS DE COMPARTICIÓN
+# =============================================================================
+
 def test_create_and_use_share_token_private_read():
     """
-    Crea un fichero privado, genera un share_token y verifica que permite leer el fichero
-    privado usando el share_token en el Authorization (sin el bearer del propietario).
+    Prueba la creación y uso de tokens de compartición para archivos privados.
+    
+    Crea un archivo privado, genera un token de compartición y verifica que permite 
+    leer el archivo privado usando el token de compartición en el header Authorization.
     """
     url_create = FILE_URL + "/create_file"
     headers_owner = {
@@ -352,8 +481,10 @@ def test_create_and_use_share_token_private_read():
 
 def test_expired_share_token_denied_read():
     """
-    Genera un share_token con caducidad inmediata y comprueba que, tras esperar un momento,
-    NO permite leer el fichero privado.
+    Prueba que los tokens de compartición expirados no permiten acceso.
+    
+    Genera un token de compartición con caducidad inmediata y comprueba que, 
+    tras esperar un momento, NO permite leer el archivo privado.
     """
     # Asegura que el fichero existe
     url_create = FILE_URL + "/create_file"
@@ -389,7 +520,17 @@ def test_expired_share_token_denied_read():
     print("[share_token-exp] Leer privado con share token caducado →", response.status_code, response.text)
     assert response.status_code == 403, f"Expected 403, got {response.status_code}"
 
+# =============================================================================
+# PRUEBAS DE PERMISOS Y AUTORIZACIÓN
+# =============================================================================
+
 def test_unauthorized_private_file_read():
+    """
+    Prueba que usuarios no autorizados no pueden leer archivos privados de otros usuarios.
+    
+    Crea un usuario no autorizado e intenta leer un archivo privado de otro usuario.
+    Verifica que se devuelve código 403 (Forbidden).
+    """
     global TEST_UNAUTHORIZED_TOKEN, TEST_UNAUTHORIZED_UID
     url = f"{USER_URL}/create_user/{TEST_UNAUTHORIZED_USERNAME}"
     headers = {"Content-Type": "application/json"}
@@ -511,6 +652,10 @@ def test_delete_user():
     get_response = requests.get(get_url, headers=headers)
     assert get_response.status_code == 404  # Should not exist now
 
-# Run tests if executed directly
+# =============================================================================
+# PUNTO DE ENTRADA PRINCIPAL
+# =============================================================================
+
+# Ejecutar pruebas si se ejecuta directamente
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -1,27 +1,72 @@
+"""
+file.py - Sistema de Gestión de Archivos con API REST
+
+Este módulo implementa un sistema completo de gestión de archivos de usuario con 
+funcionalidades de creación, lectura, modificación y eliminación, expuesto a través 
+de una API REST construida con Quart.
+
+Funcionalidades principales:
+    - Creación y modificación de archivos de usuario
+    - Gestión de visibilidad (público/privado)
+    - Sistema de tokens de compartición con expiración temporal
+    - Almacenamiento persistente en archivos CSV por usuario
+    - API REST con endpoints HTTP asíncronos
+    - Autenticación mediante tokens Bearer
+
+Estructura de datos:
+    - Archivos de usuario: almacenados en resources/files/<uid>.txt
+    - Cada archivo contiene: nombre, visibilidad, contenido
+    - Tokens de compartición: formato UID.filename.timestamp.hash
+
+Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
+Fecha de creación: 14-9-2025
+Última modificación: 11-10-2025
+Versión: 3.0.0
+Python: 3.7+
+Dependencias: pandas, quart, datetime
+
+Uso:
+    python file.py
+    
+El servidor se ejecutará en http://0.0.0.0:5051
+"""
+
 import pandas as pd
 import os, uuid
-import re
 from quart import Quart, jsonify, request
 from datetime import datetime, timedelta, timezone
+
+# =============================================================================
+# CONFIGURACIÓN Y CONSTANTES
+# =============================================================================
 
 Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
 path = "resources/files/"
 
+# =============================================================================
+# FUNCIONES DE GESTIÓN DE ARCHIVOS
+# =============================================================================
+
 def create_file(uid, token, filename, content, visibility="private"):
     """
-        Add a new file to the library of the user identified by uid.
-        If the file already exists, update its content and/or visibility.
+    Crea un nuevo archivo en la biblioteca del usuario o actualiza uno existente.
+    
+    Si el archivo ya existe, actualiza su contenido y/o visibilidad.
+    Verifica que el token proporcionado sea válido para el usuario.
 
-        Args:
-            uid (str): The user ID of the user.
-            filename (str): The name of the file to be created.
-            content (str): The content of the file.
-            visibility (str, optional): The visibility of the file. Can be "public" or "private". Defaults to "private".
+    Args:
+        uid (str): El ID de usuario del propietario del archivo.
+        token (str): Token de autenticación del usuario.
+        filename (str): El nombre del archivo a crear o actualizar.
+        content (str): El contenido del archivo.
+        visibility (str, optional): La visibilidad del archivo. Puede ser "public" o "private". Por defecto "private".
+
+    Returns:
+        None: La función no retorna valor, pero actualiza el archivo en disco.
     """
 
     # Excluye a los usuarios no dueños del fichero
     if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
-        print("Token inválido")
         return
     
     df = _open_library(uid)
@@ -38,15 +83,18 @@ def create_file(uid, token, filename, content, visibility="private"):
 
 def list_files(uid, token = None):
     """
-        List all files in the user's library.
-        If the token is provided all the files (public and private are listed).
+    Lista todos los archivos en la biblioteca del usuario.
+    
+    Si se proporciona un token válido, se listan todos los archivos (públicos y privados).
+    Si no se proporciona token, solo se pueden listar archivos públicos.
 
-        Args:
-            uid (str): The user ID of the user.
-            token (str, optional): The authentication token of the user. Defaults to None.
+    Args:
+        uid (str): El ID de usuario del propietario de la biblioteca.
+        token (str, optional): Token de autenticación del usuario. Por defecto None.
 
-        Returns:
-            list: A list of filenames in the user's library.
+    Returns:
+        list or None: Lista de nombres de archivos en la biblioteca del usuario, 
+                     o None si no se tiene permiso de acceso.
     """
     if token is not None and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
         df = _open_library(uid)
@@ -54,68 +102,64 @@ def list_files(uid, token = None):
     else:
         return None
 
-# Hay que permitir acceso con token o con contraseña para ficheros privados
 def read_file(uid, filename, token = None):
     """
-        Read the content of a file in the user's library.
-        If the token is provided the user can read both public and private files.
-        If the token is not provided the user can only read public files unless it provides
-        a valid share token.
+    Lee el contenido de un archivo en la biblioteca del usuario.
+    
+    Si se proporciona un token válido, el usuario puede leer archivos públicos y privados.
+    Si no se proporciona token, el usuario solo puede leer archivos públicos, a menos que
+    proporcione un token de compartición válido.
 
-        Args:
-            uid (str): The user ID of the user.
-            filename (str): The name of the file to be read.
-            token (str, optional): The authentication token of the user. Defaults to None.
+    Args:
+        uid (str): El ID de usuario del propietario del archivo.
+        filename (str): El nombre del archivo a leer.
+        token (str, optional): Token de autenticación del usuario o token de compartición. Por defecto None.
 
-        Returns:
-            str: The content of the file.
+    Returns:
+        str or None: El contenido del archivo si se tiene permiso de lectura, 
+                    None si no se tiene permiso o el archivo no existe.
     """
     df = _open_library(uid)
 
     file_row = df[df['name'] == filename]
 
     if file_row.empty:
-        print("El fichero no existe")
         return None
     elif file_row.iloc[0]['visibility'] == 'public':
-        print("El fichero es público")
         return file_row.iloc[0]['content']
     elif file_row.iloc[0]['visibility'] == 'private' and token is not None:
         token = token.strip()
 
         if token.count(".") >= 3 and _check_share_token(filename, token, uid):
-            print("El fichero es privado pero puedes leerlo (share token)")
             return file_row.iloc[0]['content']
 
         try:
             if token.count(".") < 3 and uuid.UUID(token) == uuid.uuid5(Secret_uuid, uid):
-                print("El fichero es privado pero puedes leerlo (owner)")
                 return file_row.iloc[0]['content']
         except Exception:
             pass
 
-        print("No tienes permiso para leer este fichero")
-        print(token)
         return None
     else:
-        print("No tienes permiso para leer este fichero")
         return None
 
 def modify_file(uid, filename, new_content, token, visibility=None):
     """
-        Modify the content of a file in the user's library.
-        The user must provide a valid token to modify a file.
+    Modifica el contenido de un archivo en la biblioteca del usuario.
+    
+    El usuario debe proporcionar un token válido para modificar un archivo.
 
-        Args:
-            uid (str): The user ID of the user.
-            filename (str): The name of the file to be modified.
-            new_content (str): The new content of the file.
-            token (str): The authentication token of the user.
-        Returns:
-            bool: True if the file was modified successfully, False otherwise.
+    Args:
+        uid (str): El ID de usuario del propietario del archivo.
+        filename (str): El nombre del archivo a modificar.
+        new_content (str): El nuevo contenido del archivo.
+        token (str): Token de autenticación del usuario.
+        visibility (str, optional): Nueva visibilidad del archivo. Por defecto None (no cambia).
+
+    Returns:
+        bool: True si el archivo fue modificado exitosamente, False en caso contrario.
     """
     if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
-        print("Token inválido")
         return False
     
     df = _open_library(uid)
@@ -127,24 +171,23 @@ def modify_file(uid, filename, new_content, token, visibility=None):
         df.to_csv(path + uid + ".txt", sep="\t", index=False)
         return True
     else:
-        print("El fichero no existe")
         return False
 
 def remove_file(uid, filename, token):
     """
-        Remove a file from the user's library.
-        The user must provide a valid token to remove a file.
+    Elimina un archivo de la biblioteca del usuario.
+    
+    El usuario debe proporcionar un token válido para eliminar un archivo.
 
-        Args:
-            uid (str): The user ID of the user.
-            filename (str): The name of the file to be removed.
-            token (str): The authentication token of the user.
+    Args:
+        uid (str): El ID de usuario del propietario del archivo.
+        filename (str): El nombre del archivo a eliminar.
+        token (str): Token de autenticación del usuario.
             
-        Returns:
-            bool: True if the file was removed successfully, False otherwise.
+    Returns:
+        bool: True si el archivo fue eliminado exitosamente, False en caso contrario.
     """
     if uuid.UUID(token) != uuid.uuid5(Secret_uuid, uid):
-        print("Token inválido")
         return False
     
     df = _open_library(uid)
@@ -154,39 +197,48 @@ def remove_file(uid, filename, token):
         df.to_csv(path + uid + ".txt", sep="\t", index=False)
         return True
     else:
-        print("El fichero no existe")
         return False
+
+# =============================================================================
+# FUNCIONES AUXILIARES
+# =============================================================================
 
 def _open_library(uid):
     """
-        Open the user's library file.
-        If the library file does not exist, create a new one.
+    Abre el archivo de biblioteca del usuario.
+    
+    Si el archivo de biblioteca no existe, crea uno nuevo vacío.
 
-        Args:
-            uid (str): The user ID of the user.
+    Args:
+        uid (str): El ID de usuario del propietario de la biblioteca.
 
-        Returns:
-            pd.DataFrame: The user's library as a pandas DataFrame.
+    Returns:
+        pd.DataFrame: La biblioteca del usuario como un DataFrame de pandas.
     """
     lib_name = os.path.join(path, uid + ".txt")
     if not os.path.exists(lib_name):
         return pd.DataFrame(columns=["name", "visibility", "content"])
     return pd.read_csv(lib_name, sep="\t")
 
+# =============================================================================
+# FUNCIONES DE TOKENS DE COMPARTICIÓN
+# =============================================================================
 
 def _create_share_token(minutes: int, uid: str, login_token: str, filename: str) -> str:
     """
-        Private function to create a share token 
+    Función privada para crear un token de compartición temporal.
+    
+    Genera un token que permite acceso temporal a un archivo específico.
 
-        Args:
-            minutes (int): number of minutes that the link will be valid
-            uid (str): id of the user
-            login_token (str): token of the user 
-            filename (str): name of the file to share
+    Args:
+        minutes (int): Número de minutos que el enlace será válido.
+        uid (str): ID del usuario propietario del archivo.
+        login_token (str): Token de autenticación del usuario.
+        filename (str): Nombre del archivo a compartir.
 
-        Returns:
-            The shared token with format UID.nombre.exp.hash where hash 
-            is the previous information as sha-1
+    Returns:
+        str or None: El token de compartición con formato UID.nombre.exp.hash donde hash 
+                    es la información previa como sha-1, o None si falla la validación.
     """
     if uuid.UUID(login_token) != uuid.uuid5(Secret_uuid, uid):
         return None
@@ -200,15 +252,17 @@ def _create_share_token(minutes: int, uid: str, login_token: str, filename: str)
 
 def _check_share_token(file_name: str, share_token: str, user: str) -> bool:
     """
-        Function to check if a share token is valid
+    Función para verificar si un token de compartición es válido.
+    
+    Valida que el token no haya expirado y que corresponda al archivo y usuario correctos.
 
-        Args: 
-            file_name (str): name of the file to share
-            share_token (str): the share token
-            user (str): uid of the owner of the file
+    Args: 
+        file_name (str): Nombre del archivo a compartir.
+        share_token (str): El token de compartición a verificar.
+        user (str): UID del propietario del archivo.
         
-        Returns: 
-            True if valid, False otherwise
+    Returns: 
+        bool: True si el token es válido, False en caso contrario.
     """
     share_token = share_token.strip()
 
@@ -243,26 +297,31 @@ def _check_share_token(file_name: str, share_token: str, user: str) -> bool:
 
     return str(expected) == str(provided)
 
-# --------------------------
-# Servidor HTTP (Quart)
-# --------------------------
+# =============================================================================
+# SERVIDOR HTTP - API REST (QUART)
+# =============================================================================
+
 app = Quart(__name__)
+
+# -----------------------------------------------------------------------------
+# Endpoints de Gestión de Archivos
+# -----------------------------------------------------------------------------
 
 @app.route("/create_file", methods=["POST"])
 async def http_create_file():
     """
-        Create a new file in the user's library.
-        The user must provide a valid token to create a file.
-        The request must be a JSON object with the following fields:
-            - uid: The user ID of the user.
-            - filename: The name of the file to be created.
-            - content: The content of the file.
-            - visibility: The visibility of the file. Can be "public" or "private". Defaults to "private".
-        Returns a JSON object with the following fields:
-            - ok: True if the file was created successfully, False otherwise.
-            - uid: The user ID of the user.
-            - filename: The name of the file.
-            - visibility: The visibility of the file.
+    Endpoint HTTP para crear un nuevo archivo en la biblioteca del usuario.
+    
+    - Método: POST
+    - Path: /create_file
+    - Headers: Authorization: Bearer <token>
+    - Body (JSON): {"uid": "<uid>", "filename": "<nombre>", "content": "<contenido>", "visibility": "<public|private>"}
+    - Comportamiento: Llama a create_file(uid, token, filename, content, visibility)
+    - Respuestas esperadas:
+        200: {"ok": true, "uid": "<uid>", "filename": "<nombre>", "visibility": "<visibilidad>"} - Archivo creado
+        400: {"ok": false, "error": "..."} - Parámetros faltantes o body inválido
+        401: {"ok": false, "error": "Falta Authorization Bearer"} - Token no proporcionado
+        500: {"ok": false, "error": "..."} - Error interno del servidor
     """
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
@@ -306,18 +365,19 @@ async def http_create_file():
 @app.route("/modify_file", methods=["PUT"])
 async def http_modify_file():
     """
-        Modify the content of a file in the user's library.
-        The user must provide a valid token to modify a file.
-        The request must be a JSON object with the following fields:
-            - uid: The user ID of the user.
-            - filename: The name of the file to be modified.
-            - new_content: The new content of the file.
-            - visibility: The visibility of the file. Can be "public" or "private". Defaults to "private".
-        Returns a JSON object with the following fields:
-            - ok: True if the file was modified successfully, False otherwise.
-            - uid: The user ID of the user.
-            - filename: The name of the file.
-            - visibility: The visibility of the file.
+    Endpoint HTTP para modificar el contenido de un archivo en la biblioteca del usuario.
+    
+    - Método: PUT
+    - Path: /modify_file
+    - Headers: Authorization: Bearer <token>
+    - Body (JSON): {"uid": "<uid>", "filename": "<nombre>", "new_content": "<nuevo_contenido>", "visibility": "<public|private>"}
+    - Comportamiento: Llama a modify_file(uid, filename, new_content, token, visibility)
+    - Respuestas esperadas:
+        200: {"ok": true, "uid": "<uid>", "filename": "<nombre>", "visibility": "<visibilidad>"} - Archivo modificado
+        400: {"ok": false, "error": "..."} - Parámetros faltantes o body inválido
+        401: {"ok": false, "error": "Falta Authorization Bearer"} - Token no proporcionado
+        403: {"ok": false, "error": "No tienes permiso para modificar este fichero o no existe"} - Sin permisos
+        500: {"ok": false, "error": "..."} - Error interno del servidor
     """
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
@@ -366,15 +426,19 @@ async def http_modify_file():
 @app.route("/remove_file", methods=["DELETE"])
 async def http_remove_file():
     """
-        Remove a file from the user's library.
-        The user must provide a valid token to remove a file.
-        The request must be a JSON object with the following fields:
-            - uid: The user ID of the user.
-            - filename: The name of the file to be removed.
-        Returns a JSON object with the following fields:
-            - ok: True if the file was removed successfully, False otherwise.
-            - uid: The user ID of the user.
-            - filename: The name of the file.
+    Endpoint HTTP para eliminar un archivo de la biblioteca del usuario.
+    
+    - Método: DELETE
+    - Path: /remove_file
+    - Headers: Authorization: Bearer <token>
+    - Body (JSON): {"uid": "<uid>", "filename": "<nombre>"}
+    - Comportamiento: Llama a remove_file(uid, filename, token)
+    - Respuestas esperadas:
+        200: {"ok": true, "uid": "<uid>", "filename": "<nombre>"} - Archivo eliminado
+        400: {"ok": false, "error": "..."} - Parámetros faltantes o body inválido
+        401: {"ok": false, "error": "Falta Authorization Bearer"} - Token no proporcionado
+        403: {"ok": false, "error": "No tienes permiso para eliminar este fichero o no existe"} - Sin permisos
+        500: {"ok": false, "error": "..."} - Error interno del servidor
     """
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
@@ -418,17 +482,18 @@ async def http_remove_file():
 @app.route("/read_file", methods=["GET"])
 async def http_read_file():
     """
-        Read the content of a file in the user's library.
-        If the token is provided the user can read both public and private files (if theirs).
-        If the token is not provided the user can only read public files.
-        The request must be a JSON object with the following fields:
-            - uid: The user ID of the user.
-            - filename: The name of the file to be read.
-        Returns a JSON object with the following fields:
-            - ok: True if the file was read successfully, False otherwise.
-            - uid: The user ID of the user.
-            - filename: The name of the file.
-            - content: The content of the file.
+    Endpoint HTTP para leer el contenido de un archivo en la biblioteca del usuario.
+    
+    - Método: GET
+    - Path: /read_file
+    - Headers: Authorization: Bearer <token> (opcional para archivos públicos)
+    - Body (JSON): {"uid": "<uid>", "filename": "<nombre>"}
+    - Comportamiento: Llama a read_file(uid, filename, token). Permite acceso con token o tokens de compartición.
+    - Respuestas esperadas:
+        200: {"ok": true, "uid": "<uid>", "filename": "<nombre>", "content": "<contenido>"} - Archivo leído
+        400: {"ok": false, "error": "..."} - Parámetros faltantes o body inválido
+        403: {"ok": false, "error": "No tienes permiso para leer este fichero o no existe"} - Sin permisos
+        500: {"ok": false, "error": "..."} - Error interno del servidor
     """
     # --- Autenticación: Bearer token (en este caso no es necesaria siempre y cuando sea archivo publico)---
     auth = request.headers.get("Authorization", "")
@@ -474,15 +539,18 @@ async def http_read_file():
 @app.route("/list_files", methods=["GET"])
 async def http_list_files():
     """
-        List all files in the user's library.
-        If the token is provided all the files (public and private are listed).
-        If the token is not provided only public files are listed.
-        The request must be a JSON object with the following fields:
-            - uid: The user ID of the user.
-        Returns a JSON object with the following fields:
-            - ok: True if the files were listed successfully, False otherwise.
-            - uid: The user ID of the user.
-            - files: A list of filenames in the user's library.
+    Endpoint HTTP para listar todos los archivos en la biblioteca del usuario.
+    
+    - Método: GET
+    - Path: /list_files
+    - Headers: Authorization: Bearer <token>
+    - Body (JSON): {"uid": "<uid>"}
+    - Comportamiento: Llama a list_files(uid, token). Requiere token para listar archivos privados.
+    - Respuestas esperadas:
+        200: {"ok": true, "uid": "<uid>", "files": ["<archivo1>", "<archivo2>", ...]} - Archivos listados
+        400: {"ok": false, "error": "..."} - Parámetros faltantes o body inválido
+        401: {"ok": false, "error": "Falta Authorization Bearer"} - Token no proporcionado
+        500: {"ok": false, "error": "..."} - Error interno del servidor
     """
     # --- Autenticación: Bearer token ---
     auth = request.headers.get("Authorization", "")
@@ -517,17 +585,26 @@ async def http_list_files():
         # Cualquier error no controlado
         return jsonify({"ok": False, "error": str(e)}), 500
 
+# -----------------------------------------------------------------------------
+# Endpoints de Compartición
+# -----------------------------------------------------------------------------
+
 @app.route("/create_share_token", methods=["POST"])
 async def http_create_share_token():
     """
-        Creates a valid share token if the uid passed and token verify
-        The request must be a JSON object with the following fields:
-            - uid: The user ID
-            - filename: The file to share
-            - minutes: The number of minutes that the link will be valid
-        Returns a JSON object with the following fields:
-            - ok: True is the share token was created successfully
-            - share_token: the share token created
+    Endpoint HTTP para crear un token de compartición temporal.
+    
+    - Método: POST
+    - Path: /create_share_token
+    - Headers: Authorization: Bearer <token>
+    - Body (JSON): {"uid": "<uid>", "filename": "<nombre>", "minutes": <minutos>}
+    - Comportamiento: Llama a _create_share_token(minutes, uid, login_token, filename)
+    - Respuestas esperadas:
+        200: {"ok": true, "share_token": "<token>"} - Token de compartición creado
+        400: {"ok": false, "error": "..."} - Parámetros faltantes o body inválido
+        401: {"ok": false, "error": "Falta Authorization Bearer"} - Token no proporcionado
+        403: {"ok": false, "error": "No se pudo crear el enlace (token inválido o fichero inexistente)"} - Sin permisos
+        500: {"ok": false, "error": "..."} - Error interno del servidor
     """
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -548,6 +625,9 @@ async def http_create_share_token():
 
     return jsonify({"ok": True, "share_token": share}), 200
 
+# =============================================================================
+# PUNTO DE ENTRADA PRINCIPAL
+# =============================================================================
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5051, debug=True)
-    
