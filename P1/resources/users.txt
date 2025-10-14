@@ -1,2 +1,0 @@
-username	password	UID
-unauthorized_user	password	4a7cb171-78b8-4069-b92c-bffbde9be96a
