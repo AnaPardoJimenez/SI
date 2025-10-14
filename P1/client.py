@@ -380,18 +380,17 @@ def test_create_private_file():
     
     Verifica la creación exitosa de un archivo con visibilidad privada.
     """
+
+    print("\n    Probando: Private file")
+
     url = FILE_URL + "/create_file"
     headers = {"Content-Type": "application/json", "Authorization": "Bearer " + TEST_USERTOKEN}
     data = {"uid": TEST_USERUID, "filename": "fichero_001.txt", "content": "texto de prueba del fichero"}
     response = requests.post(url, headers=headers, data=json.dumps(data))
     assert response.status_code == 200
 
-def test_create_public_file():
-    """
-    Prueba la creación de archivos públicos.
-    
-    Verifica la creación exitosa de un archivo con visibilidad pública.
-    """
+    print("    Probando: Public file")
+
     url = FILE_URL + "/create_file"
     headers = {}
     headers["Content-Type"] = "application/json"
@@ -404,7 +403,63 @@ def test_create_public_file():
     response = requests.post(url, headers=headers, data=json.dumps(data))
     assert response.status_code == 200
 
+def test_unauthorized_private_file_read():
+    """
+    Prueba que usuarios no autorizados no pueden leer archivos privados de otros usuarios.
+    
+    Crea un usuario no autorizado e intenta leer un archivo privado de otro usuario.
+    Verifica que se devuelve código 403 (Forbidden).
+    """
+    print("\n    Probando: Leer fichero normal")
+
+    url = FILE_URL + "/read_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    response = requests.get(url, headers=headers, data=json.dumps(data))
+    assert response.status_code == 200
+
+    print("    Probando: Leer fichero privado sin permiso")
+
+    global TEST_UNAUTHORIZED_TOKEN, TEST_UNAUTHORIZED_UID
+    url = f"{USER_URL}/create_user/{TEST_UNAUTHORIZED_USERNAME}"
+    headers = {"Content-Type": "application/json"}
+    data = {"password": "password"}
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+
+    TEST_UNAUTHORIZED_TOKEN = response.json()['Token']
+    TEST_UNAUTHORIZED_UID = response.json()['UID']
+
+    url = FILE_URL + "/read_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_001.txt"
+    response = requests.get(url, headers=headers, data=json.dumps(data))
+    
+    assert response.status_code == 403
+
+    print("    Probando: Leer fichero publico sin permiso")
+
+    url = FILE_URL + "/read_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    response = requests.get(url, headers=headers, data=json.dumps(data))
+    
+    assert response.status_code == 200
+
 def test_modify_file():
+    print("\n    Probando: Modificar con permiso")
+
     url = FILE_URL + "/modify_file"
     headers = {}
     headers["Content-Type"] = "application/json"
@@ -417,18 +472,24 @@ def test_modify_file():
     response = requests.put(url, headers=headers, data=json.dumps(data))
     assert response.status_code == 200
 
-def test_read_file():
-    url = FILE_URL + "/read_file"
+    print("    Probando: modificar sin permiso")
+
+    url = FILE_URL + "/modify_file"
     headers = {}
     headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_USERTOKEN
+    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
     data = {}
     data["uid"] = TEST_USERUID
     data["filename"] = "fichero_002.txt"
-    response = requests.get(url, headers=headers, data=json.dumps(data))
-    assert response.status_code == 200
+    data["new_content"] = "Intento de modificacion no autorizado"
+    data["visibility"] = "public"
+    response = requests.put(url, headers=headers, data=json.dumps(data))
+    
+    assert response.status_code == 403
 
 def test_list_files():
+    print("\n    Probando: Listar ficheros")
+
     url = FILE_URL + "/list_files"
     headers = {}
     headers["Content-Type"] = "application/json"
@@ -449,6 +510,8 @@ def test_create_and_use_share_token_private_read():
     Crea un archivo privado, genera un token de compartición y verifica que permite 
     leer el archivo privado usando el token de compartición en el header Authorization.
     """
+    print("\n    Probando: Crear share token")
+
     url_create = FILE_URL + "/create_file"
     headers_owner = {
         "Content-Type": "application/json",
@@ -465,7 +528,8 @@ def test_create_and_use_share_token_private_read():
     assert response.status_code == 200
     share_token = response.json()["share_token"]
 
-    # Intenta leer con el share token caducado
+    print("    Probando: Leer con share token normal")
+
     url_read = FILE_URL + "/read_file"
     headers_share = {
         "Content-Type": "application/json",
@@ -475,13 +539,8 @@ def test_create_and_use_share_token_private_read():
     response = requests.get(url_read, headers=headers_share, data=json.dumps(data_read))
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
-def test_expired_share_token_denied_read():
-    """
-    Prueba que los tokens de compartición expirados no permiten acceso.
-    
-    Genera un token de compartición con caducidad inmediata y comprueba que, 
-    tras esperar un momento, NO permite leer el archivo privado.
-    """
+    print("    Probando: Leer con share token caducado")
+
     # Asegura que el fichero existe
     url_create = FILE_URL + "/create_file"
     headers_owner = {
@@ -517,72 +576,9 @@ def test_expired_share_token_denied_read():
 # PRUEBAS DE PERMISOS Y AUTORIZACIÓN
 # =============================================================================
 
-def test_unauthorized_private_file_read():
-    """
-    Prueba que usuarios no autorizados no pueden leer archivos privados de otros usuarios.
-    
-    Crea un usuario no autorizado e intenta leer un archivo privado de otro usuario.
-    Verifica que se devuelve código 403 (Forbidden).
-    """
-    global TEST_UNAUTHORIZED_TOKEN, TEST_UNAUTHORIZED_UID
-    url = f"{USER_URL}/create_user/{TEST_UNAUTHORIZED_USERNAME}"
-    headers = {"Content-Type": "application/json"}
-    data = {"password": "password"}
-    response = requests.post(url, headers=headers, data=json.dumps(data))
-
-    TEST_UNAUTHORIZED_TOKEN = response.json()['Token']
-    TEST_UNAUTHORIZED_UID = response.json()['UID']
-
-    url = FILE_URL + "/read_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_001.txt"
-    response = requests.get(url, headers=headers, data=json.dumps(data))
-    
-    assert response.status_code == 403
-
-def test_unauthorized_public_file_read():
-    url = FILE_URL + "/read_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_002.txt"
-    response = requests.get(url, headers=headers, data=json.dumps(data))
-    
-    assert response.status_code == 200
-
-def test_unauthorized_file_modification():
-    url = FILE_URL + "/modify_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_002.txt"
-    data["new_content"] = "Intento de modificacion no autorizado"
-    data["visibility"] = "public"
-    response = requests.put(url, headers=headers, data=json.dumps(data))
-    
-    assert response.status_code == 403
-
-def test_unauthorized_file_removal():
-    url = FILE_URL + "/remove_file"
-    headers = {}
-    headers["Content-Type"] = "application/json"
-    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
-    data = {}
-    data["uid"] = TEST_USERUID
-    data["filename"] = "fichero_002.txt"
-    response = requests.delete(url, headers=headers, data=json.dumps(data))
-    
-    assert response.status_code == 403
-
 def test_remove_file():
+    print("\n    Probando: Eliminar con permiso")
+
     url = FILE_URL + "/remove_file"
     headers = {}
     headers["Content-Type"] = "application/json"
@@ -592,6 +588,19 @@ def test_remove_file():
     data["filename"] = "fichero_001.txt"
     response = requests.delete(url, headers=headers, data=json.dumps(data))
     assert response.status_code == 200
+
+    print("    Probando: Eliminar sin permiso")
+
+    url = FILE_URL + "/remove_file"
+    headers = {}
+    headers["Content-Type"] = "application/json"
+    headers["Authorization"] = "Bearer " + TEST_UNAUTHORIZED_TOKEN
+    data = {}
+    data["uid"] = TEST_USERUID
+    data["filename"] = "fichero_002.txt"
+    response = requests.delete(url, headers=headers, data=json.dumps(data))
+    
+    assert response.status_code == 403
 
 def test_delete_user():
     url = f"{USER_URL}/delete_user/{TEST_NEW_USERNAME}"
