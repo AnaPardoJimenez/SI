@@ -91,7 +91,7 @@ Para asegurarse de que funciona desde cero en cualquier máquina:
 ```bash
 # Paso 1: Detener y eliminar contenedores (incluye huérfanos)
 cd /home/juan/A3Q1/SI
-sudo docker-compose down --remove-orphans
+sudo docker-compose down --remove-orphans -v
 
 # Paso 2: Eliminar imágenes de tus servicios
 sudo docker rmi p1_user_api p1_file_api

@@ -197,15 +197,15 @@ INSERT INTO Participa (actor_id, movie_id) VALUES
 (36, 38), (37, 38), (38, 38), -- En 3.0
 (36, 39), (37, 39), (38, 39), -- En 3.0+1.0
 
--- Otras películas
-(39, 40), -- Al Pacino en The Godfather
-(40, 41), -- John Travolta en Pulp Fiction
-(41, 42), -- Christian Bale en The Dark Knight
-(42, 43), -- Leonardo DiCaprio en Inception
-(43, 44), -- Tom Hanks en otras películas
-(44, 45), -- Jim Caviezel en Passion of the Christ
-(45, 46), -- Asa Butterfield en Ender's Game
-(46, 47); -- Seth Rogen en Sausage Party
+-- Otras películas  
+(39, 43), -- Al Pacino en The Godfather (ID 43)
+(40, 44), -- John Travolta en Pulp Fiction (ID 44)
+(41, 45), -- Christian Bale en The Dark Knight (ID 45)
+(42, 40), -- Leonardo DiCaprio en Passion of the Christ (ID 40)
+(43, 41), -- Tom Hanks en Ender's Game (ID 41)
+(44, 42), -- Jim Caviezel en Sausage Party (ID 42)
+(45, 43), -- Asa Butterfield en The Godfather (ID 43)
+(46, 44); -- Seth Rogen en Pulp Fiction (ID 44)
 
 -- Insertar Pertenencia (Películas en Carritos)
 INSERT INTO Pertenece (order_id, movie_id) VALUES 

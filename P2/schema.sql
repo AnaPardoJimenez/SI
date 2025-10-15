@@ -3,13 +3,13 @@
 
 -- Tabla de Actores
 CREATE TABLE Actores (
-    actor_id INT PRIMARY KEY AUTO_INCREMENT,
+    actor_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL
 );
 
 -- Tabla de Películas
 CREATE TABLE Peliculas (
-    movie_id INT PRIMARY KEY AUTO_INCREMENT,
+    movie_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description VARCHAR(1023),
     year INT,
@@ -19,7 +19,7 @@ CREATE TABLE Peliculas (
 
 -- Tabla de Usuarios
 CREATE TABLE Usuario (
-    user_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     password VARCHAR(255) NOT NULL,
     token VARCHAR(255),
@@ -28,10 +28,8 @@ CREATE TABLE Usuario (
 
 -- Tabla de Carrito/Órdenes
 CREATE TABLE Carrito (
-    order_id INT NOT NULL,
+    order_id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
-    PRIMARY KEY (order_id, user_id),
-    FOREIGN KEY (order_id) REFERENCES Peliculas(movie_id),
     FOREIGN KEY (user_id) REFERENCES Usuario(user_id)
 );
 
