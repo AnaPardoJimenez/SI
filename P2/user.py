@@ -34,6 +34,7 @@ import uuid
 from quart import Quart, jsonify, request
 from sqlalchemy.orm import declarative_base, sessionmaker, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from http import HTTPStatus
 
 # =============================================================================
 # CONFIGURACIÓN Y CONSTANTES
@@ -72,11 +73,9 @@ def create_user(username, password):
 
     token = uuid.uuid5(Secret_uuid, uid)
 
-    #TODO: Hacer la query y todo
-
     query = "INSERT INTO Usuario (user_id, name, password, token, balance, admin) \
                     VALUES (:user_id, :name, :password, :token, :balance, :admin)"
-    params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 0, "admin": False}
+    params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 100, "admin": False}
     fetch_all(engine, query, params)
 
     return uid, True  # Se creó nuevo usuario
@@ -92,29 +91,17 @@ def login_user(username, password):
     Returns:
         tuple: (uid, token, error_code)
             - (uid, token, "OK") si el login es exitoso
-            - (None, None, "FILE_NOT_FOUND") si el archivo no existe
-            - (None, None, "PERMISSION_DENIED") si no hay permisos
-            - (None, None, "FILE_CORRUPTED") si el archivo está corrupto
-            - (None, None, "UNKNOWN_ERROR") si hay otro error inesperado
-            - (None, None, "UNAUTHORIZED") si las credenciales son incorrectas
+            - (None, None, "ERROR") si el user no existe o la contraseña es incorrecta
     """
-    df, error_code = open_users_txt()
-    # Si hubo error al abrir el archivo, devolver el error específico
-    if error_code != "OK":
-        return None, None, error_code
-    
-    # Buscar el usuario con las credenciales proporcionadas
-    usuario = df[
-        (df["username"].astype(str).str.strip() == str(username).strip()) &
-        (df["password"].astype(str).str.strip() == str(password).strip())
-    ]
-    
-    if not usuario.empty:
-        uid = usuario.iloc[0]["UID"]
-        return uid, uuid.uuid5(Secret_uuid, uid), "OK"
-    
-    return None, None, "UNAUTHORIZED"
+    query = "SELECT user_id, token FROM Usuario WHERE name = :name and password = :password"
+    params = {"name": username, "password": password}
+    data = fetch_all(engine, query, params)
 
+    if len(data) > 0:
+        return data[0]["user_id"], data[0]["token"], "OK"
+    else:
+        return None, None, "ERROR"
+    
 def get_user_id(username):
     """
     Obtiene el ID de usuario (UID) para el nombre de usuario dado.
@@ -140,7 +127,7 @@ def get_user_id(username):
 # FUNCIONES DE MODIFICACIÓN DE USUARIOS
 # =============================================================================
 
-def delete_user(username: str, password: str):
+def delete_user(uid: str):
     """
     Elimina el usuario dado y su archivo de biblioteca asociado.
 
@@ -152,46 +139,20 @@ def delete_user(username: str, password: str):
         tuple: (success: bool, error_code: str)
             - (True, "OK") si se eliminó correctamente
             - (False, "NOT_FOUND") si el usuario no existe
-            - (False, "UNAUTHORIZED") si la contraseña es incorrecta
-            - (False, "FILE_SYSTEM_ERROR") si hay error accediendo al directorio de archivos
-            - (False, error_code) si hubo error al leer el archivo (FILE_NOT_FOUND, PERMISSION_DENIED, FILE_CORRUPTED, UNKNOWN_ERROR)
     """
-    df, error_code = open_users_txt()
+    query = "SELECT name FROM Usuario WHERE user_id = :uid"
+    params = {"uid": uid}
+    data = fetch_all(engine, query, params)
+
+    if len(data) == 0:
+        return False, "NOT_FOUND"
     
-    # Si hubo error al leer el archivo, devolver ese error
-    if error_code != "OK":
-        return False, error_code
+    # Eliminar usuario de la base de datos
+    query = "DELETE FROM Usuario WHERE user_id = :uid"
+    params = {"uid": uid}
+    fetch_all(engine, query, params)
 
-    # Verificar que el DataFrame no esté vacío
-    if df.empty:
-        return False, "NOT_FOUND"
-
-    # Verificar si el usuario existe
-    usuario_existe = df[df["username"].astype(str).str.strip() == str(username).strip()]
-    if usuario_existe.empty:
-        return False, "NOT_FOUND"
-
-    # Verificar si la contraseña es correcta
-    usuario = df[
-        (df["username"].astype(str).str.strip() == str(username).strip()) &
-        (df["password"].astype(str).str.strip() == str(password).strip())
-    ]
-    if usuario.empty:
-        return False, "UNAUTHORIZED"
-
-    uid = df.loc[(df["username"] == username) & (df["password"] == password), "UID"].values[0]
-    usr_lib_name = usr_lib_dir + uid + ".txt"
-
-    if os.path.exists(usr_lib_dir):
-        if os.path.exists(usr_lib_name):
-            os.remove(usr_lib_name)
-
-        df = df[~((df["username"] == username) & (df["password"] == password))]
-        df.to_csv(users_file, sep="\t", index=False)
-
-        return True, "OK"
-
-    return False, "FILE_SYSTEM_ERROR"
+    return True, "OK"
 
 # =============================================================================
 # FUNCIONES AUXILIARES
@@ -206,8 +167,8 @@ def comprobar_token_admin(token):
 async def fetch_all(engine, query, params={}):
     async with engine.connect() as conn:
         result = await conn.execute(text(query), params)
-        rows = result. all()
-        keys = result. keys()
+        rows = result.all()
+        keys = result.keys()
         data = [dict(zip(keys, row)) for row in rows]
     return data
 
@@ -237,52 +198,54 @@ async def http_user(username):
     - Comportamiento: Llama a create_user(username, password). Si el usuario ya existe, 
                      intenta hacer login en su lugar.
     - Respuestas esperadas:
-        201: {"status":"OK", "username": username, "UID": "<uid>", "Token": "<token>"} - Usuario creado
-        200: {"status":"OK", "username": username, "UID": "<uid>", "Token": "<token>"} - Usuario ya existía, hizo login
-        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Usuario existe pero contraseña incorrecta
-        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes o body inválido
-        500: {"status":"ERROR", "message": "..."} - Error interno del servidor
+        HTTPStatus.OK: {"status":"OK", "username": username, "UID": "<uid>", "Token": "<token>"} - Usuario ya existía, hizo login
+        HTTPStatus.UNAUTHORIZED: {"status":"ERROR", "message": "Credenciales incorrectas"} - Usuario existe pero contraseña incorrecta
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Parámetros faltantes o body inválido
+        HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Error interno del servidor
     """
     try:
         body = (await request.get_json(silent=True))
         if body is None:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
         
         # --- Autenticación: Bearer token ---
         #TODO: Preguntar al profe si es correcto el await request.headers.get("Authorization", "")
         auth = await request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
-            return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), 400
+            return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
 
         token = auth.split(" ", 1)[1].strip()
         if not comprobar_token_admin(token):
-            return jsonify({"ok": False, "error": "Token no válido"}), 401
+            return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
 
         name = body.get("name")
         if not name:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "name"'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "name"'}), HTTPStatus.BAD_REQUEST
         
         password = body.get("password")
         if not password:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), HTTPStatus.BAD_REQUEST
 
         result = create_user(name, password)
         if result is None:
-            return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
+            return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
 
-        uid, token, was_created = result
+        uid, was_created = result
         
-        # Si se creó un nuevo usuario, devolver 201 Created
-        # Si ya existía y se hizo login, devolver 200 OK
-        status_code = 201 if was_created else 200
+        # Si ya existía y se hizo login, devolver HTTPStatus.OK OK
+        if was_created:
+            status_code = HTTPStatus.OK
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
+        
         return jsonify({'status': 'OK', 'username': username, 'uid': uid}), status_code
 
     except Exception as exc:
-        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
 
-@app.route("/login/<username>", methods=["POST"])
-async def http_login(username):
+@app.route("/user", methods=["GET"])
+async def http_login():
     """
     Endpoint HTTP para inicio de sesión de usuario.
     
@@ -291,187 +254,45 @@ async def http_login(username):
     - Body (JSON): {"password": "<password>"}
     - Comportamiento: Llama a login_user(username, password)
     - Respuestas esperadas:
-        200: {"status":"OK", "UID":"<uid>", "Token": "<token>"} - Login exitoso
-        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Credenciales inválidas
-        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes
-        500: {"status":"ERROR", "message": "..."} - Error interno del servidor o problemas con el archivo
+        HTTPStatus.OK: {"status":"OK", "UID":"<uid>", "Token": "<token>"} - Login exitoso
+        HTTPStatus.UNAUTHORIZED: {"status":"ERROR", "message": "Credenciales incorrectas"} - Credenciales inválidas
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Parámetros faltantes
+        HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Error interno del servidor o problemas con el archivo
     """
     try:
 
         body = (await request.get_json(silent=True))
         if body is None:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
 
+        username = body.get("name")
+        if not username:
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "name"'}), HTTPStatus.BAD_REQUEST
         password = body.get("password")
         if not password:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), HTTPStatus.BAD_REQUEST
 
         uid, token, error_code = login_user(username, password)
         
         if error_code != "OK":
             # Credenciales incorrectas (error del cliente)
             if error_code == "UNAUTHORIZED":
-                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
-            
-            # Errores del servidor (archivo)
-            error_response = handle_file_error(error_code)
-            if error_response:
-                return error_response
-            
-            # Error desconocido
-            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
+                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
 
-        return jsonify({'status': 'OK', 'UID': uid, 'Token': token}), 200
+            # Error desconocido
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
+
+        return jsonify({'status': 'OK', 'uid': uid, 'token': token}), HTTPStatus.OK
 
     except Exception as exc:
-        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
-
-# -----------------------------------------------------------------------------
-# Endpoints de Consulta de Usuarios
-# -----------------------------------------------------------------------------
-
-@app.route("/get_user_id/<username>", methods=["GET"])
-async def http_get_user_id(username):
-    """
-    Endpoint HTTP para comprobar existencia de usuario y recuperar su ID.
-    
-    - Método: GET
-    - Path: /get_user_id/<username>
-    - Comportamiento: Llama a get_user_id(username)
-    - Respuestas esperadas:
-        200: {"status":"OK", "UID":"<uid>", "username": "<username>"} - Usuario encontrado
-        404: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
-        500: {"status":"ERROR", "message": "..."} - Error interno del servidor o problemas con el archivo
-    """
-    uid, error_code = get_user_id(username)
-    
-    # Si el usuario no fue encontrado (pero el archivo se leyó bien)
-    if error_code == "USER_NOT_FOUND":
-        return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), 404
-    
-    # Si hubo error al leer el archivo
-    if error_code != "OK":
-        error_response = handle_file_error(error_code)
-        if error_response:
-            return error_response
-        
-        # Error desconocido
-        return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
-
-    return jsonify({'status': 'OK', 'UID': uid, 'username': username}), 200
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
 
 # -----------------------------------------------------------------------------
 # Endpoints de Modificación de Usuarios
 # -----------------------------------------------------------------------------
 
-@app.route("/change_pass/<username>", methods=["PATCH"])
-async def http_change_pass(username):
-    """
-    Endpoint HTTP para cambiar la contraseña de un usuario.
-    
-    - Método: PATCH
-    - Path: /change_pass/<username>
-    - Body (JSON): {"password":"<contraseña_actual>", "new_password":"<nueva_contraseña>"}
-    - Comportamiento: Llama a change_pass(username, password, new_password)
-    - Respuestas esperadas:
-        200: {"status":"OK"} - Contraseña cambiada exitosamente
-        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes
-        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Contraseña actual incorrecta
-        404: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
-        500: {"status":"ERROR", "message": "..."} - Error interno del servidor
-    """
-    try:
-        body = (await request.get_json(silent=True))
-        if body is None:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
-
-        password = body.get("password")
-        new_password = body.get("new_password")
-
-        if not password:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
-        
-        if not new_password:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "new_password"'}), 400
-
-        success, error_code = change_pass(username, password, new_password)
-        
-        if not success:
-            # Errores de usuario
-            if error_code == "NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), 404
-            elif error_code == "UNAUTHORIZED":
-                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
-            
-            # Errores del servidor (archivo)
-            error_response = handle_file_error(error_code)
-            if error_response:
-                return error_response
-            
-            # Error desconocido
-            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
-
-        return jsonify({'status': 'OK'}), 200
-
-    except Exception as exc:
-        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
-
-
-@app.route("/change_username/<username>", methods=["PATCH"])
-async def http_change_username(username):
-    """
-    Endpoint HTTP para cambiar el nombre de usuario.
-    
-    - Método: PATCH
-    - Path: /change_username/<username>
-    - Body (JSON): {"password":"<contraseña>", "new_username":"<nuevo_nombre>"}
-    - Comportamiento: Llama a change_username(username, password, new_username)
-    - Respuestas esperadas:
-        200: {"status":"OK"} - Nombre de usuario cambiado exitosamente
-        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes
-        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Contraseña incorrecta
-        404: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
-        500: {"status":"ERROR", "message": "..."} - Error interno del servidor
-    """
-    try:
-        body = (await request.get_json(silent=True))
-        if body is None:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
-
-        password = body.get("password")
-        new_username = body.get("new_username")
-
-        if not password:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
-        
-        if not new_username:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "new_username"'}), 400
-
-        success, error_code = change_username(username, password, new_username)
-        
-        if not success:
-            # Errores de usuario
-            if error_code == "NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), 404
-            elif error_code == "UNAUTHORIZED":
-                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
-            
-            # Errores del servidor (archivo)
-            error_response = handle_file_error(error_code)
-            if error_response:
-                return error_response
-            
-            # Error desconocido
-            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
-        
-        return jsonify({'status': 'OK'}), 200
-
-    except Exception as exc:
-        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
-
-
-@app.route("/delete_user/<username>", methods=["DELETE"])
-async def http_delete_user(username):
+@app.route("/user/<uid>", methods=["DELETE"])
+async def http_delete_user(uid):
     """
     Endpoint HTTP para eliminar un usuario.
     
@@ -480,49 +301,37 @@ async def http_delete_user(username):
     - Body (JSON): {"password":"<contraseña>"}
     - Comportamiento: Llama a delete_user(username, password). Elimina el usuario y su archivo de biblioteca.
     - Respuestas esperadas:
-        200: {"status":"OK"} - Usuario eliminado exitosamente
-        400: {"status":"ERROR", "message": "..."} - Parámetros faltantes
-        401: {"status":"ERROR", "message": "Credenciales incorrectas"} - Contraseña incorrecta
-        404: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
-        500: {"status":"ERROR", "message": "..."} - Error interno del servidor o del sistema de archivos
+        HTTPStatus.OK: {"status":"OK"} - Usuario eliminado exitosamente
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Parámetros faltantes
+        HTTPStatus.UNAUTHORIZED: {"status":"ERROR", "message": "Credenciales incorrectas"} - Contraseña incorrecta
+        HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
+        HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Error interno del servidor o del sistema de archivos
     
     ADVERTENCIA: Operación destructiva. Se elimina el usuario y todos sus archivos asociados.
     """
     try:
-        body = (await request.get_json(silent=True))
-        if body is None:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), 400
+        auth = await request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
 
-        password = body.get("password")
-
-        if not password:
-            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), 400
-        
-        success, error_code = delete_user(username, password)
+        token = auth.split(" ", 1)[1].strip()
+        if not comprobar_token_admin(token):
+            return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+       
+        success, error_code = delete_user(uid)
         
         if not success:
             # Errores de usuario
             if error_code == "NOT_FOUND":
-                return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), 404
-            elif error_code == "UNAUTHORIZED":
-                return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), 401
-            
-            # Error específico del sistema de archivos
-            elif error_code == "FILE_SYSTEM_ERROR":
-                return jsonify({'status': 'ERROR', 'message': 'Error en el sistema de archivos'}), 500
-            
-            # Errores del servidor (archivo)
-            error_response = handle_file_error(error_code)
-            if error_response:
-                return error_response
+                return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
             
             # Error desconocido
-            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), 500
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
         
-        return jsonify({'status': 'OK'}), 200
+        return jsonify({'status': 'OK'}), HTTPStatus.OK
 
     except Exception as exc:
-        return jsonify({'status': 'ERROR', 'message': str(exc)}), 500
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
 
 # =============================================================================
 # PUNTO DE ENTRADA PRINCIPAL

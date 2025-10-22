@@ -1,0 +1,2 @@
+username	password	UID
+unauthorized_user	password	0c6d707f-abb9-4b9d-bf57-efab2054d08f
