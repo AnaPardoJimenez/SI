@@ -19,11 +19,12 @@ CREATE TABLE Peliculas (
 
 -- Tabla de Usuarios
 CREATE TABLE Usuario (
-    user_id SERIAL PRIMARY KEY,
+    user_id VARCHAR(37) NOT NULL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     password VARCHAR(255) NOT NULL,
     token VARCHAR(255),
-    balance DECIMAL(10,2) DEFAULT 0.00
+    balance DECIMAL(10,2) DEFAULT 0.00,
+    admin BOOLEAN DEFAULT FALSE
 );
 
 -- Tabla de Carrito/Órdenes

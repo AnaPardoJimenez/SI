@@ -1,6 +1,7 @@
 -- Datos para poblar las tablas del sistema de películas
 -- Incluye Star Wars, Harry Potter, LOTR, Ghibli, Evangelion y más!
 
+
 -- Insertar Actores
 INSERT INTO Actores (name) VALUES 
 -- Star Wars
@@ -126,20 +127,11 @@ INSERT INTO Peliculas (name, description, year, genre, price) VALUES
 ('Inception', 'Un ladrón que roba secretos de los sueños', 2010, 'Ciencia Ficción', 12.99);
 
 -- Insertar Usuarios
-INSERT INTO Usuario (name, password, token, balance) VALUES 
-('Ana Pardo Jiménez', 'password123', 'token_ana_001', 150.00),
-('Carlos García', 'password456', 'token_carlos_002', 200.50),
-('María López', 'password789', 'token_maria_003', 75.25),
-('Luis Fernández', 'password101', 'token_luis_004', 300.00),
-('Sofia Martínez', 'password202', 'token_sofia_005', 125.75);
+INSERT INTO Usuario (user_id, name, password, token, balance, admin) VALUES
+('123e4567-e89b-12d3-a456-426614174000', 'admin', 'admin', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 15000.00, TRUE);
 
 -- Insertar Carritos
-INSERT INTO Carrito (order_id, user_id) VALUES 
-(1, 1), -- Ana Pardo Jiménez
-(2, 2), -- Carlos García
-(3, 3), -- María López
-(4, 4), -- Luis Fernández
-(5, 5); -- Sofia Martínez
+INSERT INTO Carrito (order_id, user_id) VALUES
 
 -- Insertar Participaciones (Actores en Películas)
 INSERT INTO Participa (actor_id, movie_id) VALUES 
