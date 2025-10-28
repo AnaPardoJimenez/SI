@@ -41,8 +41,6 @@ from http import HTTPStatus
 # =============================================================================
 
 Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
-users_file = "resources/users.txt"
-usr_lib_dir = "resources/files/"
 
 # =============================================================================
 # FUNCIONES DE GESTIÓN DE USUARIOS

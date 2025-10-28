@@ -30,7 +30,7 @@ CREATE TABLE Usuario (
 -- Tabla de Carrito/Órdenes
 CREATE TABLE Carrito (
     order_id SERIAL PRIMARY KEY,
-    user_id INT NOT NULL,
+    user_id VARCHAR(37) NOT NULL,
     FOREIGN KEY (user_id) REFERENCES Usuario(user_id)
 );
 
