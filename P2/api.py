@@ -120,16 +120,17 @@ def add_to_cart(user_id, movie_id):
     #NOTE: revisar esta query (crea el carrito si no existe y añade la película)
     query = """
                 WITH upsert_carrito AS (
-                INSERT INTO Carrito (user_id)
-                SELECT :user_id
-                WHERE NOT EXISTS (SELECT 1 FROM Carrito WHERE user_id = :user_id)
-                RETURNING order_id),
-                
-                carrito_objetivo AS (
-                SELECT order_id FROM upsert_carrito
-                UNION ALL
-                SELECT order_id FROM Carrito WHERE user_id = :user_id
-                LIMIT 1)
+                    INSERT INTO Carrito (user_id)
+                    SELECT :user_id
+                    WHERE NOT EXISTS (SELECT 1 FROM Carrito WHERE user_id = :user_id)
+                    RETURNING order_id),
+                    
+                    carrito_objetivo AS (
+                    SELECT order_id FROM upsert_carrito
+                    UNION ALL
+                    SELECT order_id FROM Carrito WHERE user_id = :user_id
+                    LIMIT 1
+                )
 
                 INSERT INTO Pertenece (order_id, movie_id)
                 SELECT order_id, :movie_id
@@ -166,3 +167,5 @@ DATABASE_URL = "postgresql+asyncpg://alumnodb:1234@localhost:9999/si1"
 # --- Engine y sesión asíncronos ---
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+app.route("/")
