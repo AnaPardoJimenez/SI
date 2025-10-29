@@ -91,7 +91,7 @@ def login_user(username, password):
             - (uid, token, "OK") si el login es exitoso
             - (None, None, "ERROR") si el user no existe o la contraseña es incorrecta
     """
-    query = "SELECT user_id, token FROM Usuario WHERE name = :name and password = :password"
+    query = "SELECT user_id, token FROM Usuario WHERE name ILIKE :name and password LIKE :password"
     params = {"name": username, "password": password}
     data = fetch_all(engine, query, params)
 
@@ -113,7 +113,7 @@ def get_user_id(username):
             - (False, "USER_NOT_FOUND") si el usuario no existe
     """
 
-    query = "SELECT user_id FROM Usuario WHERE name = :name"
+    query = "SELECT user_id FROM Usuario WHERE name ILIKE :name"
     params = {"name": username}
     data = fetch_all(engine, query, params)
     if data:
@@ -138,7 +138,7 @@ def delete_user(uid: str):
             - (True, "OK") si se eliminó correctamente
             - (False, "NOT_FOUND") si el usuario no existe
     """
-    query = "SELECT name FROM Usuario WHERE user_id = :uid"
+    query = "SELECT name FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
     data = fetch_all(engine, query, params)
 
@@ -146,7 +146,7 @@ def delete_user(uid: str):
         return False, "NOT_FOUND"
     
     # Eliminar usuario de la base de datos
-    query = "DELETE FROM Usuario WHERE user_id = :uid"
+    query = "DELETE FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
     fetch_all(engine, query, params)
 
@@ -336,4 +336,4 @@ async def http_delete_user(uid):
 # =============================================================================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5050, debug=True)
+    app.run(host="127.0.0.1", port=5050, debug=True)

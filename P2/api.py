@@ -168,4 +168,65 @@ DATABASE_URL = "postgresql+asyncpg://alumnodb:1234@localhost:9999/si1"
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-app.route("/")
+@app.route("/movies", methods=["GET"])
+async def http_get_movies():
+    try:
+        body = (await request.get_json(silent=True))
+
+        result = get_movies(body)
+        if result[1] == "OK":
+            return jsonify({'status': 'OK', 'movies': result[0]}), HTTPStatus.OK
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'No se encontraron películas que coincidan con los criterios de búsqueda.'}), HTTPStatus.NOT_FOUND
+    
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+@app.route("/movies/<int:movie_id>", methods=["GET"])
+async def http_get_movie_by_id(movie_id):
+    try:
+        result = get_movies_by_id(movie_id)
+        if result[1] == "OK":
+            return jsonify({'status': 'OK', 'movie': result[0]}), HTTPStatus.OK
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'No se encontró la película con el ID proporcionado.'}), HTTPStatus.NOT_FOUND
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@app.route("/cart", methods=["GET"])
+async def http_get_cart():
+    try:
+        body = (await request.get_json(silent=True))
+
+        user_id = body.get("user_id")
+
+        result = get_cart(user_id)
+        if result[1] == "OK":
+            return jsonify({'status': 'OK', 'cart': result[0]}), HTTPStatus.OK
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'El carrito está vacío o no se encontró.'}), HTTPStatus.NOT_FOUND
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@app.route("/cart/<int:movie_id>", methods=["PUT"])
+async def http_add_to_cart(movie_id):
+    try:
+        body = (await request.get_json(silent=True))
+
+        user_id = body.get("user_id")
+
+        result = add_to_cart(user_id, movie_id)
+        if result[1] == "OK":
+            return jsonify({'status': 'OK', 'message': 'Película añadida al carrito.'}), HTTPStatus.OK
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'No se pudo añadir la película al carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+# =============================================================================
+# PUNTO DE ENTRADA PRINCIPAL
+# =============================================================================
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5051, debug=True)
