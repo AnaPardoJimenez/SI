@@ -12,3 +12,25 @@ services:
     volumes:
       - ./schema.sql:/docker-entrypoint-initdb.d/1_schema.sql
       - ./populate.sql:/docker-entrypoint-initdb.d/2_populate.sql
+
+  # ----------------------------------------------------------------------------
+  # Servicio: API de Gestión de Usuarios
+  # ----------------------------------------------------------------------------
+  user_api:
+    build: .                      # Construir imagen desde Dockerfile en directorio actual
+    ports:
+      - "5050:5050"               # Mapear puerto 5050 del host al contenedor
+    volumes:
+      - ./:/app                   # Montar directorio actual en /app (desarrollo en tiempo real)
+    command: python user.py       # Ejecutar servidor de usuarios al iniciar contenedor
+
+  # ----------------------------------------------------------------------------
+  # Servicio: API de Gestión de Archivos
+  # ----------------------------------------------------------------------------
+  api_api:
+    build: .                      # Construir imagen desde Dockerfile en directorio actual
+    ports:
+      - "5051:5051"               # Mapear puerto 5051 del host al contenedor
+    volumes:
+      - ./:/app                   # Montar directorio actual en /app (desarrollo en tiempo real)
+    command: python api.py       # Ejecutar servidor de archivos al iniciar contenedor

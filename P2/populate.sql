@@ -131,7 +131,11 @@ INSERT INTO Usuario (user_id, name, password, token, balance, admin) VALUES
 ('123e4567-e89b-12d3-a456-426614174000', 'admin', 'admin', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 15000.00, TRUE);
 
 -- Insertar Carritos
-INSERT INTO Carrito (order_id, user_id) VALUES
+-- Insertar Carritos
+-- Si quieres poblar carritos iniciales añade filas aquí con el formato:
+--   INSERT INTO Carrito (order_id, user_id) VALUES (1, 'uuid-user-1'), (2, 'uuid-user-2');
+-- Actualmente se omite la inserción para evitar errores de sintaxis; asegúrate de
+-- crear primero los usuarios referenciados en la tabla Usuario antes de añadir carritos.
 
 -- Insertar Participaciones (Actores en Películas)
 INSERT INTO Participa (actor_id, movie_id) VALUES 

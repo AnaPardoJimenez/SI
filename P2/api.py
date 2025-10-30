@@ -29,11 +29,11 @@ Uso:
 El servidor se ejecutará en http://0.0.0.0:5051
 """
 
-import pandas as pd
 import os
 import uuid
 from quart import Quart, jsonify, request
-from sqlalchemy.orm import declarative_base, sessionmaker, text
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from http import HTTPStatus
 
