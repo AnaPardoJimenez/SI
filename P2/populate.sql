@@ -126,17 +126,6 @@ INSERT INTO Peliculas (name, description, year, genre, price) VALUES
 ('The Dark Knight', 'Batman lucha contra el Joker en Gotham City', 2008, 'Acción', 10.99),
 ('Inception', 'Un ladrón que roba secretos de los sueños', 2010, 'Ciencia Ficción', 12.99);
 
--- Insertar Usuarios
-INSERT INTO Usuario (user_id, name, password, token, balance, admin) VALUES
-('123e4567-e89b-12d3-a456-426614174000', 'admin', 'admin', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 15000.00, TRUE);
-
--- Insertar Carritos
--- Insertar Carritos
--- Si quieres poblar carritos iniciales añade filas aquí con el formato:
---   INSERT INTO Carrito (order_id, user_id) VALUES (1, 'uuid-user-1'), (2, 'uuid-user-2');
--- Actualmente se omite la inserción para evitar errores de sintaxis; asegúrate de
--- crear primero los usuarios referenciados en la tabla Usuario antes de añadir carritos.
-
 -- Insertar Participaciones (Actores en Películas)
 INSERT INTO Participa (actor_id, movie_id) VALUES 
 -- Star Wars
@@ -202,16 +191,3 @@ INSERT INTO Participa (actor_id, movie_id) VALUES
 (44, 42), -- Jim Caviezel en Sausage Party (ID 42)
 (45, 43), -- Asa Butterfield en The Godfather (ID 43)
 (46, 44); -- Seth Rogen en Pulp Fiction (ID 44)
-
--- Insertar Pertenencia (Películas en Carritos)
-INSERT INTO Pertenece (order_id, movie_id) VALUES 
--- Ana Pardo Jiménez tiene Star Wars en su carrito
-(1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6),
--- Carlos García tiene Harry Potter
-(2, 7), (2, 8), (2, 9), (2, 10),
--- María López tiene LOTR y Hobbit
-(3, 16), (3, 17), (3, 18), (3, 19), (3, 20), (3, 21),
--- Luis Fernández tiene Studio Ghibli
-(4, 24), (4, 25), (4, 26), (4, 27), (4, 28),
--- Sofia Martínez tiene Anime y Matrix
-(5, 29), (5, 30), (5, 31), (5, 32), (5, 33);
