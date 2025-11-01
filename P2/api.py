@@ -41,7 +41,7 @@ from http import HTTPStatus
 # CONFIGURACIÓN Y CONSTANTES
 # =============================================================================
 
-DATABASE_URL = "postgresql+asyncpg://alumnodb:1234@localhost:9999/si1"
+DATABASE_URL = "postgresql+asyncpg://alumnodb:1234@db:5432/si1"
 engine = create_async_engine(DATABASE_URL, echo=False)
 
 # =============================================================================
@@ -137,6 +137,7 @@ def add_to_cart(user_id, movie_id):
                 FROM carrito_objetivo
                 ON CONFLICT DO NOTHING
             """
+
     params = {"user_id": user_id, "movie_id": movie_id}
 
     data = fetch_all(engine, query, params)
@@ -229,4 +230,4 @@ async def http_add_to_cart(movie_id):
 # =============================================================================
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5051, debug=True)
+    app.run(host="0.0.0.0", port=5051, debug=True)

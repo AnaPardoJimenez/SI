@@ -20,6 +20,8 @@ COPY . .
 # Exponer ambos puertos (los usará docker-compose)
 EXPOSE 5050
 EXPOSE 5051
+EXPOSE 5432
+EXPOSE 9999
 
 # No fijamos un CMD aquí, lo define docker-compose con "command"
 CMD ["python3"]

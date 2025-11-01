@@ -40,13 +40,47 @@ from http import HTTPStatus
 # CONFIGURACIÓN Y CONSTANTES
 # =============================================================================
 
+DATABASE_URL = "postgresql+asyncpg://alumnodb:1234@db:5432/si1"
+# --- Engine y sesión asíncronos ---
+engine = create_async_engine(DATABASE_URL, echo=False)
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
 Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
+
+# =============================================================================
+# FUNCIONES AUXILIARES
+# =============================================================================
+
+def comprobar_token_admin(token):
+    """
+    Comprueba si el token es de administrador.
+    """
+    return True
+
+async def fetch_all(engine, query, params={}):
+    print(f"61 query={query}")
+    async with engine.connect() as conn:
+        print(f"63 params={params}")
+        result = await conn.execute(text(query), params)
+        print(f"65 result={result}")
+        if result.rowcount > 0:
+            print(f"67 Se encontraron resultados")
+            rows = result.all()
+            print(f"68 rows={rows}")
+            keys = result.keys()
+            print(f"69 keys={keys}")
+            data = [dict(zip(keys, row)) for row in rows]
+            print(f"71 data={data}")
+            return data
+        else:
+            print(f"74 No se encontraron resultados")
+            return None
 
 # =============================================================================
 # FUNCIONES DE GESTIÓN DE USUARIOS
 # =============================================================================
 
-def create_user(username, password):
+async def create_user(username, password):
     """
     Crea un nuevo usuario con el nombre de usuario y contraseña dados.
     Si el usuario ya existe, intenta hacer login en su lugar.
@@ -61,24 +95,29 @@ def create_user(username, password):
               False si el usuario ya existía y se hizo login exitosamente
             - None si el usuario existe pero las credenciales son incorrectas
     """
+    print("87 Verificando si el usuario existe")
     # Si el usuario ya existe, hacer login en su lugar
-    uid, error_code = get_user_id(username)
+    uid, error_code = await get_user_id(username)
     if error_code == 'OK':
+        print("91 Usuario ya existe")
         return None, False  # No se creó, ya existía
     
+    print("94 Creando nuevo usuario")
     uid = uuid.uuid4()
     uid = str(uid)
 
-    token = uuid.uuid5(Secret_uuid, uid)
+    token = str(uuid.uuid5(Secret_uuid, uid))
+    print(f"99 uid={uid}, token={token}")
 
     query = "INSERT INTO Usuario (user_id, name, password, token, balance, admin) \
                     VALUES (:user_id, :name, :password, :token, :balance, :admin)"
     params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 100, "admin": False}
     fetch_all(engine, query, params)
+    print(f"105 Usuario creado exitosamente")
 
     return uid, True  # Se creó nuevo usuario
 
-def login_user(username, password):
+async def login_user(username, password):
     """
     Inicia sesión de un usuario usando nombre de usuario y contraseña.
 
@@ -91,16 +130,16 @@ def login_user(username, password):
             - (uid, token, "OK") si el login es exitoso
             - (None, None, "ERROR") si el user no existe o la contraseña es incorrecta
     """
-    query = "SELECT user_id, token FROM Usuario WHERE name ILIKE :name and password LIKE :password"
+    query = "SELECT user_id, token FROM Usuario WHERE name ILIKE :name and password LIKE :password;"
     params = {"name": username, "password": password}
-    data = fetch_all(engine, query, params)
+    data = await fetch_all(engine, query, params)
 
     if len(data) > 0:
         return data[0]["user_id"], data[0]["token"], "OK"
     else:
         return None, None, "ERROR"
     
-def get_user_id(username):
+async def get_user_id(username):
     """
     Obtiene el ID de usuario (UID) para el nombre de usuario dado.
     
@@ -115,7 +154,7 @@ def get_user_id(username):
 
     query = "SELECT user_id FROM Usuario WHERE name ILIKE :name"
     params = {"name": username}
-    data = fetch_all(engine, query, params)
+    data = await fetch_all(engine, query, params)
     if data:
         return data[0]["user_id"], "OK"
     else:
@@ -125,7 +164,7 @@ def get_user_id(username):
 # FUNCIONES DE MODIFICACIÓN DE USUARIOS
 # =============================================================================
 
-def delete_user(uid: str):
+async def delete_user(uid: str):
     """
     Elimina el usuario dado y su archivo de biblioteca asociado.
 
@@ -140,7 +179,7 @@ def delete_user(uid: str):
     """
     query = "SELECT name FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
-    data = fetch_all(engine, query, params)
+    data = await fetch_all(engine, query, params)
 
     if len(data) == 0:
         return False, "NOT_FOUND"
@@ -153,40 +192,17 @@ def delete_user(uid: str):
     return True, "OK"
 
 # =============================================================================
-# FUNCIONES AUXILIARES
-# =============================================================================
-
-def comprobar_token_admin(token):
-    """
-    Comprueba si el token es de administrador.
-    """
-    return True
-
-async def fetch_all(engine, query, params={}):
-    async with engine.connect() as conn:
-        result = await conn.execute(text(query), params)
-        rows = result.all()
-        keys = result.keys()
-        data = [dict(zip(keys, row)) for row in rows]
-    return data
-
-# =============================================================================
 # SERVIDOR HTTP - API REST (QUART)
 # =============================================================================
 
 app = Quart(__name__)
-
-DATABASE_URL = "postgresql+asyncpg://alumnodb:1234@localhost:9999/si1"
-# --- Engine y sesión asíncronos ---
-engine = create_async_engine(DATABASE_URL, echo=False)
-async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 # -----------------------------------------------------------------------------
 # Endpoints de Autenticación y Creación
 # -----------------------------------------------------------------------------
 
 @app.route("/user", methods=["PUT"])
-async def http_user(username):
+async def http_user():
     """
     Endpoint HTTP para crear un nuevo usuario.
     
@@ -202,43 +218,62 @@ async def http_user(username):
         HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Error interno del servidor
     """
     try:
+        print("210 Iniciando creación de usuario")
         body = (await request.get_json(silent=True))
+        print(f"212 body={body}")
         if body is None:
+            print("213 Body JSON faltante")
             return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
         
+        print(f"218 body={body}")
         # --- Autenticación: Bearer token ---
         #TODO: Preguntar al profe si es correcto el await request.headers.get("Authorization", "")
-        auth = await request.headers.get("Authorization", "")
+        auth = request.headers.get("Authorization", "")
+        print(f"221 auth={auth}")
         if not auth.startswith("Bearer "):
+            print("220 Falta Authorization Bearer")
             return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
 
         token = auth.split(" ", 1)[1].strip()
+        print(f"227 token={token}")
         if not comprobar_token_admin(token):
+            print("225 Token no válido")
             return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
 
         name = body.get("name")
+        print(f"233 name={name}")
         if not name:
+            print("230 Falta clave 'name'")
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "name"'}), HTTPStatus.BAD_REQUEST
         
         password = body.get("password")
+        print(f"237 password={password}")
         if not password:
+            print("235 Falta clave 'password'")
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), HTTPStatus.BAD_REQUEST
 
-        result = create_user(name, password)
+        print("238 Llamando a create_user")
+        result = await create_user(name, password)
         if result is None:
+            print("241 Credenciales incorrectas")
             return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
 
         uid, was_created = result
+        print(f"245 Resultado recibido, was_created={was_created}")
         
         # Si ya existía y se hizo login, devolver HTTPStatus.OK OK
         if was_created:
+            print("249 Usuario creado exitosamente")
             status_code = HTTPStatus.OK
         else:
+            print("252 Usuario no creado")
             return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
         
-        return jsonify({'status': 'OK', 'username': username, 'uid': uid}), status_code
+        print(f"255 Retornando éxito, uid={uid}")
+        return jsonify({'status': 'OK', 'username': name, 'uid': uid}), status_code
 
     except Exception as exc:
+        print(f"259 Excepción capturada: {exc}")
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
 
@@ -270,7 +305,7 @@ async def http_login():
         if not password:
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), HTTPStatus.BAD_REQUEST
 
-        uid, token, error_code = login_user(username, password)
+        uid, token, error_code = await login_user(username, password)
         
         if error_code != "OK":
             # Credenciales incorrectas (error del cliente)
@@ -308,7 +343,7 @@ async def http_delete_user(uid):
     ADVERTENCIA: Operación destructiva. Se elimina el usuario y todos sus archivos asociados.
     """
     try:
-        auth = await request.headers.get("Authorization", "")
+        auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
 
@@ -316,7 +351,7 @@ async def http_delete_user(uid):
         if not comprobar_token_admin(token):
             return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
        
-        success, error_code = delete_user(uid)
+        success, error_code = await delete_user(uid)
         
         if not success:
             # Errores de usuario
@@ -336,4 +371,4 @@ async def http_delete_user(uid):
 # =============================================================================
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5050, debug=True)
+    app.run(host="0.0.0.0", port=5050, debug=True)

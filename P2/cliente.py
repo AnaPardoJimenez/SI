@@ -1,8 +1,8 @@
 import requests
 from http import HTTPStatus
 
-USERS = "http://127.0.0.1:5050"
-CATALOG = "http://127.0.0.1:5051"
+USERS = "http://0.0.0.0:5050"
+CATALOG = "http://0.0.0.0:5051"
 
 def ok(name, cond):
     status = "OK" if cond else "FAIL"
@@ -26,21 +26,21 @@ def main():
 
     headers_admin = {"Authorization": f"Bearer {token_admin}"}
 
-    # # Se asume que el usuario 'Alice' no existe
-    # r = requests.put(f"{USERS}/user", json={"name": "alice", "password": "secret"}, headers=headers_admin)
-    # if ok("Crear usuario 'alice'", r.status_code == HTTPStatus.OK and r.json()):
-    #     data = r.json()
-    #     uid_alice, _ = data["uid"], data["username"]
-    # else:
-    #     print("\nPruebas incompletas: Fin del test por error crítico")
-    #     exit(-1)
+    # Se asume que el usuario 'Alice' no existe
+    r = requests.put(f"{USERS}/user", json={"name": "alice", "password": "secret"}, headers=headers_admin)
+    if ok("Crear usuario 'alice'", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        uid_alice, _ = data["uid"], data["username"]
+    else:
+        print("\nPruebas incompletas: Fin del test por error crítico")
+        exit(-1)
 
-    # r = requests.get(f"{USERS}/user", json={"name": "alice", "password": "secret"})
-    # if ok("Autenticar usuario 'alice'", r.status_code == HTTPStatus.OK and r.json()["uid"] == uid_alice):
-    #     data = r.json()
-    #     _, token_alice = data["uid"], data["token"]
-    # else:
-    #     print("\nPruebas incompletas: Fin del test por error crítico")
+    r = requests.get(f"{USERS}/user", json={"name": "alice", "password": "secret"})
+    if ok("Autenticar usuario 'alice'", r.status_code == HTTPStatus.OK and r.json()["uid"] == uid_alice):
+        data = r.json()
+        _, token_alice = data["uid"], data["token"]
+    else:
+        print("\nPruebas incompletas: Fin del test por error crítico")
 
     # headers_alice = {"Authorization": f"Bearer {token_alice}"}
 
@@ -160,17 +160,17 @@ def main():
     #     ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
 
     
-    print("# =======================================================")
-    print("# Limpiar base de datos")
-    print("# =======================================================")
+    # print("# =======================================================")
+    # print("# Limpiar base de datos")
+    # print("# =======================================================")
     
-    r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
-    ok("Borrar usuario alice", r.status_code == HTTPStatus.OK)
+    # r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
+    # ok("Borrar usuario alice", r.status_code == HTTPStatus.OK)
 
-    r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
-    ok("Borrar usuario inexistente", r.status_code == HTTPStatus.NOT_FOUND)
+    # r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
+    # ok("Borrar usuario inexistente", r.status_code == HTTPStatus.NOT_FOUND)
 
-    print("\nPruebas completadas.")
+    # print("\nPruebas completadas.")
 
 if __name__ == "__main__":
     main()

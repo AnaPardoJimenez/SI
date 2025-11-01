@@ -1,6 +1,8 @@
 -- Datos para poblar las tablas del sistema de películas
 -- Incluye Star Wars, Harry Potter, LOTR, Ghibli, Evangelion y más!
 
+INSERT INTO Usuario (user_id, name, password, token, balance, admin) VALUES
+('123e4567-e89b-12d3-a456-426614174000', 'admin', 'admin', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 15000.00, TRUE);
 
 -- Insertar Actores
 INSERT INTO Actores (name) VALUES 
