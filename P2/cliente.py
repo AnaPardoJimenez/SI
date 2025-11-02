@@ -42,7 +42,7 @@ def main():
     else:
         print("\nPruebas incompletas: Fin del test por error crítico")
 
-    # headers_alice = {"Authorization": f"Bearer {token_alice}"}
+    headers_alice = {"Authorization": f"Bearer {token_alice}"}
 
     # print("# =======================================================")
     # print("# Distintas consultas de alice al catálogo de películas")
@@ -160,17 +160,17 @@ def main():
     #     ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
 
     
-    # print("# =======================================================")
-    # print("# Limpiar base de datos")
-    # print("# =======================================================")
+    print("# =======================================================")
+    print("# Limpiar base de datos")
+    print("# =======================================================")
     
-    # r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
-    # ok("Borrar usuario alice", r.status_code == HTTPStatus.OK)
+    r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
+    ok("Borrar usuario alice", r.status_code == HTTPStatus.OK)
 
-    # r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
-    # ok("Borrar usuario inexistente", r.status_code == HTTPStatus.NOT_FOUND)
+    r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
+    ok("Borrar usuario inexistente", r.status_code == HTTPStatus.NOT_FOUND)
 
-    # print("\nPruebas completadas.")
+    print("\nPruebas completadas.")
 
 if __name__ == "__main__":
     main()

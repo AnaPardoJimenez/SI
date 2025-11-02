@@ -61,20 +61,37 @@ async def fetch_all(engine, query, params={}):
     print(f"61 query={query}")
     async with engine.connect() as conn:
         print(f"63 params={params}")
-        result = await conn.execute(text(query), params)
-        print(f"65 result={result}")
-        if result.rowcount > 0:
-            print(f"67 Se encontraron resultados")
+        # Verificar si la query es de modificación (INSERT/UPDATE/DELETE) o solo lectura (SELECT)
+        query_upper = query.strip().upper()
+        is_modification = query_upper.startswith(('INSERT', 'UPDATE', 'DELETE'))
+        
+        if is_modification:
+            # Para operaciones de modificación, usar transacción con commit automático
+            async with conn.begin():
+                result = await conn.execute(text(query), params)
+                print(f"65 result={result}, rowcount={result.rowcount}")
+                if result.rowcount > 0:
+                    print(f"67 Operación de modificación exitosa")
+                    return True  # Operación exitosa
+                else:
+                    print(f"67 No se afectaron filas")
+                    return None  # No se afectaron filas
+        else:
+            # Para SELECT, solo leer datos sin commit
+            result = await conn.execute(text(query), params)
+            print(f"65 result={result}")
+            print(f"67 Query devuelve filas (SELECT)")
             rows = result.all()
             print(f"68 rows={rows}")
-            keys = result.keys()
-            print(f"69 keys={keys}")
-            data = [dict(zip(keys, row)) for row in rows]
-            print(f"71 data={data}")
-            return data
-        else:
-            print(f"74 No se encontraron resultados")
-            return None
+            if len(rows) > 0:
+                keys = result.keys()
+                print(f"69 keys={keys}")
+                data = [dict(zip(keys, row)) for row in rows]
+                print(f"71 data={data}")
+                return data
+            else:
+                print(f"74 No se encontraron resultados")
+                return None
 
 # =============================================================================
 # FUNCIONES DE GESTIÓN DE USUARIOS
@@ -112,7 +129,7 @@ async def create_user(username, password):
     query = "INSERT INTO Usuario (user_id, name, password, token, balance, admin) \
                     VALUES (:user_id, :name, :password, :token, :balance, :admin)"
     params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 100, "admin": False}
-    fetch_all(engine, query, params)
+    await fetch_all(engine, query, params)
     print(f"105 Usuario creado exitosamente")
 
     return uid, True  # Se creó nuevo usuario
@@ -151,13 +168,16 @@ async def get_user_id(username):
             - (uid, "OK") si el usuario existe
             - (False, "USER_NOT_FOUND") si el usuario no existe
     """
-
+    print("154 Obtiendo ID de usuario")
     query = "SELECT user_id FROM Usuario WHERE name ILIKE :name"
     params = {"name": username}
     data = await fetch_all(engine, query, params)
-    if data:
+    print(f"156 data={data}")
+    if data and len(data) > 0:
+        print("159 Usuario encontrado")
         return data[0]["user_id"], "OK"
     else:
+        print("163 Usuario no encontrado")
         return False, "USER_NOT_FOUND"
 
 # =============================================================================
@@ -181,13 +201,13 @@ async def delete_user(uid: str):
     params = {"uid": uid}
     data = await fetch_all(engine, query, params)
 
-    if len(data) == 0:
+    if not data or len(data) == 0:
         return False, "NOT_FOUND"
     
     # Eliminar usuario de la base de datos
     query = "DELETE FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
-    fetch_all(engine, query, params)
+    await fetch_all(engine, query, params)
 
     return True, "OK"
 
@@ -202,7 +222,7 @@ app = Quart(__name__)
 # -----------------------------------------------------------------------------
 
 @app.route("/user", methods=["PUT"])
-async def http_user():
+async def http_create_user():
     """
     Endpoint HTTP para crear un nuevo usuario.
     
@@ -227,7 +247,6 @@ async def http_user():
         
         print(f"218 body={body}")
         # --- Autenticación: Bearer token ---
-        #TODO: Preguntar al profe si es correcto el await request.headers.get("Authorization", "")
         auth = request.headers.get("Authorization", "")
         print(f"221 auth={auth}")
         if not auth.startswith("Bearer "):
@@ -293,31 +312,40 @@ async def http_login():
         HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Error interno del servidor o problemas con el archivo
     """
     try:
-
+        print("296 Iniciando inicio de sesión")
         body = (await request.get_json(silent=True))
+        print(f"298 body={body}")
         if body is None:
             return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
+        print(f"301 body={body}")
 
         username = body.get("name")
+        print(f"303 username={username}")
         if not username:
+            print("304 Falta clave 'name'")
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "name"'}), HTTPStatus.BAD_REQUEST
         password = body.get("password")
+        print(f"308 password={password}")
         if not password:
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), HTTPStatus.BAD_REQUEST
-
         uid, token, error_code = await login_user(username, password)
-        
+        print(f"313 uid={uid}, token={token}, error_code={error_code}")
         if error_code != "OK":
+            print(f"317 error_code={error_code}")
             # Credenciales incorrectas (error del cliente)
             if error_code == "UNAUTHORIZED":
+                print("320 Credenciales incorrectas")
                 return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
-
+            print("323 Error desconocido")
+            print(f"324 Retornando error desconocido")
             # Error desconocido
             return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
+        print(f"326 Retornando OK")
 
         return jsonify({'status': 'OK', 'uid': uid, 'token': token}), HTTPStatus.OK
 
     except Exception as exc:
+        print(f"Excepción en http_login: {exc}")
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
 
 # -----------------------------------------------------------------------------

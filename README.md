@@ -130,4 +130,4 @@ pytest -vv -s client.py
 
 
 ## P2
-**docker exec -it postgres_si1 psql -U postgres psql (15.14 (Debian 15.14-1.pgdg13+1))**: Para probar las query de la base de datos a pelo
+**sudo docker exec -it postgres_si1 psql -U alumnodb -d si1 (15.14 (Debian 15.14-1.pgdg13+1))**: Para probar las query de la base de datos a pelo
