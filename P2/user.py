@@ -58,9 +58,7 @@ def comprobar_token_admin(token):
     return True
 
 async def fetch_all(engine, query, params={}):
-    print(f"61 query={query}")
     async with engine.connect() as conn:
-        print(f"63 params={params}")
         # Verificar si la query es de modificación (INSERT/UPDATE/DELETE) o solo lectura (SELECT)
         query_upper = query.strip().upper()
         is_modification = query_upper.startswith(('INSERT', 'UPDATE', 'DELETE'))
@@ -69,28 +67,19 @@ async def fetch_all(engine, query, params={}):
             # Para operaciones de modificación, usar transacción con commit automático
             async with conn.begin():
                 result = await conn.execute(text(query), params)
-                print(f"65 result={result}, rowcount={result.rowcount}")
                 if result.rowcount > 0:
-                    print(f"67 Operación de modificación exitosa")
                     return True  # Operación exitosa
                 else:
-                    print(f"67 No se afectaron filas")
                     return None  # No se afectaron filas
         else:
             # Para SELECT, solo leer datos sin commit
             result = await conn.execute(text(query), params)
-            print(f"65 result={result}")
-            print(f"67 Query devuelve filas (SELECT)")
             rows = result.all()
-            print(f"68 rows={rows}")
             if len(rows) > 0:
                 keys = result.keys()
-                print(f"69 keys={keys}")
                 data = [dict(zip(keys, row)) for row in rows]
-                print(f"71 data={data}")
                 return data
             else:
-                print(f"74 No se encontraron resultados")
                 return None
 
 # =============================================================================
@@ -112,25 +101,20 @@ async def create_user(username, password):
               False si el usuario ya existía y se hizo login exitosamente
             - None si el usuario existe pero las credenciales son incorrectas
     """
-    print("87 Verificando si el usuario existe")
     # Si el usuario ya existe, hacer login en su lugar
     uid, error_code = await get_user_id(username)
     if error_code == 'OK':
-        print("91 Usuario ya existe")
         return None, False  # No se creó, ya existía
     
-    print("94 Creando nuevo usuario")
     uid = uuid.uuid4()
     uid = str(uid)
 
     token = str(uuid.uuid5(Secret_uuid, uid))
-    print(f"99 uid={uid}, token={token}")
 
     query = "INSERT INTO Usuario (user_id, name, password, token, balance, admin) \
                     VALUES (:user_id, :name, :password, :token, :balance, :admin)"
     params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 100, "admin": False}
     await fetch_all(engine, query, params)
-    print(f"105 Usuario creado exitosamente")
 
     return uid, True  # Se creó nuevo usuario
 
@@ -168,16 +152,12 @@ async def get_user_id(username):
             - (uid, "OK") si el usuario existe
             - (False, "USER_NOT_FOUND") si el usuario no existe
     """
-    print("154 Obtiendo ID de usuario")
     query = "SELECT user_id FROM Usuario WHERE name ILIKE :name"
     params = {"name": username}
     data = await fetch_all(engine, query, params)
-    print(f"156 data={data}")
     if data and len(data) > 0:
-        print("159 Usuario encontrado")
         return data[0]["user_id"], "OK"
     else:
-        print("163 Usuario no encontrado")
         return False, "USER_NOT_FOUND"
 
 # =============================================================================
@@ -238,61 +218,42 @@ async def http_create_user():
         HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Error interno del servidor
     """
     try:
-        print("210 Iniciando creación de usuario")
         body = (await request.get_json(silent=True))
-        print(f"212 body={body}")
         if body is None:
-            print("213 Body JSON faltante")
             return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
         
-        print(f"218 body={body}")
         # --- Autenticación: Bearer token ---
         auth = request.headers.get("Authorization", "")
-        print(f"221 auth={auth}")
         if not auth.startswith("Bearer "):
-            print("220 Falta Authorization Bearer")
             return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
 
         token = auth.split(" ", 1)[1].strip()
-        print(f"227 token={token}")
         if not comprobar_token_admin(token):
-            print("225 Token no válido")
             return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
 
         name = body.get("name")
-        print(f"233 name={name}")
         if not name:
-            print("230 Falta clave 'name'")
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "name"'}), HTTPStatus.BAD_REQUEST
         
         password = body.get("password")
-        print(f"237 password={password}")
         if not password:
-            print("235 Falta clave 'password'")
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), HTTPStatus.BAD_REQUEST
 
-        print("238 Llamando a create_user")
         result = await create_user(name, password)
         if result is None:
-            print("241 Credenciales incorrectas")
             return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
 
         uid, was_created = result
-        print(f"245 Resultado recibido, was_created={was_created}")
         
         # Si ya existía y se hizo login, devolver HTTPStatus.OK OK
         if was_created:
-            print("249 Usuario creado exitosamente")
             status_code = HTTPStatus.OK
         else:
-            print("252 Usuario no creado")
             return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
         
-        print(f"255 Retornando éxito, uid={uid}")
         return jsonify({'status': 'OK', 'username': name, 'uid': uid}), status_code
 
     except Exception as exc:
-        print(f"259 Excepción capturada: {exc}")
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
 
@@ -312,40 +273,27 @@ async def http_login():
         HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Error interno del servidor o problemas con el archivo
     """
     try:
-        print("296 Iniciando inicio de sesión")
         body = (await request.get_json(silent=True))
-        print(f"298 body={body}")
         if body is None:
             return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
-        print(f"301 body={body}")
 
         username = body.get("name")
-        print(f"303 username={username}")
         if not username:
-            print("304 Falta clave 'name'")
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "name"'}), HTTPStatus.BAD_REQUEST
         password = body.get("password")
-        print(f"308 password={password}")
         if not password:
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), HTTPStatus.BAD_REQUEST
         uid, token, error_code = await login_user(username, password)
-        print(f"313 uid={uid}, token={token}, error_code={error_code}")
         if error_code != "OK":
-            print(f"317 error_code={error_code}")
             # Credenciales incorrectas (error del cliente)
             if error_code == "UNAUTHORIZED":
-                print("320 Credenciales incorrectas")
                 return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
-            print("323 Error desconocido")
-            print(f"324 Retornando error desconocido")
             # Error desconocido
             return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
-        print(f"326 Retornando OK")
 
         return jsonify({'status': 'OK', 'uid': uid, 'token': token}), HTTPStatus.OK
 
     except Exception as exc:
-        print(f"Excepción en http_login: {exc}")
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
 
 # -----------------------------------------------------------------------------
