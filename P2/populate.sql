@@ -64,7 +64,7 @@ INSERT INTO Actores (name) VALUES
 ('Seth Rogen');
 
 -- Insertar Películas
-INSERT INTO Peliculas (name, description, year, genre, price) VALUES 
+INSERT INTO Peliculas (title, description, year, genre, price) VALUES 
 -- Star Wars Saga
 ('Star Wars: Episode IV - A New Hope', 'La historia de Luke Skywalker y la Rebelión contra el Imperio Galáctico', 1977, 'Ciencia Ficción', 12.99),
 ('Star Wars: Episode V - The Empire Strikes Back', 'Luke aprende sobre la Fuerza mientras la Rebelión lucha contra el Imperio', 1980, 'Ciencia Ficción', 12.99),
@@ -126,10 +126,11 @@ INSERT INTO Peliculas (name, description, year, genre, price) VALUES
 ('The Godfather', 'La historia de una familia mafiosa italiana en Nueva York', 1972, 'Drama', 9.99),
 ('Pulp Fiction', 'Historias entrelazadas de crimen en Los Ángeles', 1994, 'Crimen', 8.99),
 ('The Dark Knight', 'Batman lucha contra el Joker en Gotham City', 2008, 'Acción', 10.99),
-('Inception', 'Un ladrón que roba secretos de los sueños', 2010, 'Ciencia Ficción', 12.99);
+('Inception', 'Un ladrón que roba secretos de los sueños', 2010, 'Ciencia Ficción', 12.99),
+('Gladiator', 'Un general romano busca venganza contra el emperador corrupto', 2000, 'Action', 10.99);
 
 -- Insertar Participaciones (Actores en Películas)
-INSERT INTO Participa (actor_id, movie_id) VALUES 
+INSERT INTO Participa (actor_id, movieid) VALUES 
 -- Star Wars
 (1, 1), (2, 1), (3, 1), -- Mark Hamill, Harrison Ford, Carrie Fisher en A New Hope
 (1, 2), (2, 2), (3, 2), -- En Empire Strikes Back

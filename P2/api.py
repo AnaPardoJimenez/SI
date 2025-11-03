@@ -42,62 +42,103 @@ from http import HTTPStatus
 # =============================================================================
 
 DATABASE_URL = "postgresql+asyncpg://alumnodb:1234@db:5432/si1"
+# --- Engine y sesión asíncronos ---
 engine = create_async_engine(DATABASE_URL, echo=False)
+async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
+# =============================================================================
+# FUNCIONES AUXILIARES
+# =============================================================================
+
+async def fetch_all(engine, query, params={}):
+    async with engine.connect() as conn:
+        # Verificar si la query es de modificación (INSERT/UPDATE/DELETE) o solo lectura (SELECT)
+        query_upper = query.strip().upper()
+        is_modification = query_upper.startswith(('INSERT', 'UPDATE', 'DELETE'))
+        
+        if is_modification:
+            # Para operaciones de modificación, usar transacción con commit automático
+            async with conn.begin():
+                result = await conn.execute(text(query), params)
+                if result.rowcount > 0:
+                    return True  # Operación exitosa
+                else:
+                    return None  # No se afectaron filas
+        else:
+            # Para SELECT, solo leer datos sin commit
+            result = await conn.execute(text(query), params)
+            rows = result.all()
+            if len(rows) > 0:
+                keys = result.keys()
+                data = [dict(zip(keys, row)) for row in rows]
+                return data
+            else:
+                return None
+            
 # =============================================================================
 # FUNCIONES DE GESTIÓN DE CATÁLOGO
 # =============================================================================
 
-def get_movies(params: dict = None):
-    
+async def get_movies(params: dict = None):
     conditions = []
     query_params = {}
     query = "SELECT * FROM Peliculas"
     flag = 0
 
+    if params is None or not isinstance(params, dict):
+        data = await fetch_all(engine, query, query_params)  # 👈 await
+        if not data:
+            return None, "ERROR"
+        return data, "OK"
+
     if "title" in params:
         conditions.append("title ILIKE :title")
-        query_params["title"] = f"%{params['title']}"
+        query_params["title"] = f"%{params['title']}%"
         flag = 1
-    elif "year" in params:
-        conditions.append("year = :year")
-        query_params["year"] = f"%{params['year']}"
+    if "year" in params and params["year"] != "":
+        try:
+            query_params["year"] = int(params["year"])
+        except (ValueError, TypeError):
+            return {}, "ERROR"
+        else:
+            conditions.append("year = :year")
+    if "genre" in params:
+        conditions.append("genre ILIKE :genre")
+        query_params["genre"] = f"%{params['genre']}%"
         flag = 1
-    elif "genre" in params:
-        conditions.append("year = :year")
-        query_params["genre"] = f"%{params['genre']}"
-        flag = 1
-    elif "actor" in params:
+    if "actor" in params:
         conditions.append("actor ILIKE :actor")
-        query_params["actor"] = f"%{params['actor']}"
+        query_params["actor"] = f"%{params['actor']}%"
         flag = 1
 
     if flag == 1:
         query += " WHERE " + " AND ".join(conditions)
 
-    data = fetch_all(engine, query, query_params)
-    if data.empty:
+    data = await fetch_all(engine, query, query_params)
+
+    if not data:
         return None, "ERROR"
     return data, "OK"
 
-def get_movies_by_id(movie_id):
-    query = "SELECT * FROM Peliculas WHERE movie_id = :movie_id"
-    params = {"movie_id": movie_id}
+async def get_movies_by_id(movieid):
+    query = "SELECT * FROM Peliculas WHERE movieid = :movieid"
+    params = {"movieid": movieid}
 
-    data = fetch_all(engine, query, params)
-    if data.empty:
+    data = (await fetch_all(engine, query, params))
+    if not data:
         return None, "ERROR"
-    return data, "OK"
+    print("[DEBUG] get_movies_by_id data:", data)
+    return data[0], "OK"
 
 # =============================================================================
 # FUNCIONES DE GESTIÓN DE CARRITO
 # =============================================================================
 
-def get_cart(user_id, movie_id=None):
+def get_cart(user_id, movieid=None):
     query = """
-                SELECT p.movie_id, p.name, p.description, p.year, p.genre, p.price
+                SELECT p.movieid, p.name, p.description, p.year, p.genre, p.price
                 FROM Peliculas p
-                JOIN Pertenece pe ON p.movie_id = pe.movie_id
+                JOIN Pertenece pe ON p.movieid = pe.movieid
                 JOIN Carrito c ON pe.order_id = c.order_id
                 WHERE c.user_id = :user_id
             """
@@ -106,17 +147,17 @@ def get_cart(user_id, movie_id=None):
 
     data = fetch_all(engine, query, params)
 
-    # Eliminar película específica si se proporciona movie_id (no de la BBDD, solo de la consulta)
-    if movie_id:
+    # Eliminar película específica si se proporciona movieid (no de la BBDD, solo de la consulta)
+    if movieid:
         for i in range(len(data) - 1, -1, -1):
-            if data[i].get("movie_id") == movie_id:
+            if data[i].get("movieid") == movieid:
                 data.pop(i)
 
     if data.empty:
         return None, "ERROR"
     return data, "OK"
 
-def add_to_cart(user_id, movie_id):
+def add_to_cart(user_id, movieid):
     #NOTE: revisar esta query (crea el carrito si no existe y añade la película)
     query = """
                 WITH upsert_carrito AS (
@@ -132,31 +173,18 @@ def add_to_cart(user_id, movie_id):
                     LIMIT 1
                 )
 
-                INSERT INTO Pertenece (order_id, movie_id)
-                SELECT order_id, :movie_id
+                INSERT INTO Pertenece (order_id, movieid)
+                SELECT order_id, :movieid
                 FROM carrito_objetivo
                 ON CONFLICT DO NOTHING
             """
 
-    params = {"user_id": user_id, "movie_id": movie_id}
+    params = {"user_id": user_id, "movieid": movieid}
 
     data = fetch_all(engine, query, params)
     if data.empty:
         return None, "ERROR"
     return data, "OK"
-
-
-# =============================================================================
-# FUNCIONES AUXILIARES
-# =============================================================================
-
-async def fetch_all(engine, query, params={}):
-    async with engine.connect() as conn:
-        result = await conn.execute(text(query), params)
-        rows = result.all()
-        keys = result.keys()
-        data = [dict(zip(keys, row)) for row in rows]
-    return data
 
 # =============================================================================
 # SERVIDOR HTTP - API REST (QUART)
@@ -164,33 +192,35 @@ async def fetch_all(engine, query, params={}):
 
 app = Quart(__name__)
 
-DATABASE_URL = "postgresql+asyncpg://alumnodb:1234@localhost:9999/si1"
-# --- Engine y sesión asíncronos ---
-engine = create_async_engine(DATABASE_URL, echo=False)
-async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-
 @app.route("/movies", methods=["GET"])
 async def http_get_movies():
     try:
-        body = (await request.get_json(silent=True))
+        body = request.args.to_dict(flat=True)
 
-        result = get_movies(body)
-        if result[1] == "OK":
-            return jsonify({'status': 'OK', 'movies': result[0]}), HTTPStatus.OK
-        else:
-            return jsonify({'status': 'ERROR', 'message': 'No se encontraron películas que coincidan con los criterios de búsqueda.'}), HTTPStatus.NOT_FOUND
-    
+        data, status = await get_movies(body)
+
+        if status == "OK":
+            return jsonify(data), HTTPStatus.OK
+        elif status == "ERROR" and data is None:
+            return jsonify({}), HTTPStatus.NOT_FOUND
+
+        return jsonify({
+            "status": "ERROR",
+            "message": "No se encontraron películas que coincidan con los criterios de búsqueda."
+        }), HTTPStatus.NOT_FOUND
+
     except Exception as exc:
-        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+        return jsonify({"status": "ERROR", "message": str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
     
-@app.route("/movies/<int:movie_id>", methods=["GET"])
-async def http_get_movie_by_id(movie_id):
+@app.route("/movies/<int:movieid>", methods=["GET"])
+async def http_get_movie_by_id(movieid):
     try:
-        result = get_movies_by_id(movie_id)
-        if result[1] == "OK":
-            return jsonify({'status': 'OK', 'movie': result[0]}), HTTPStatus.OK
+        data, status = await get_movies_by_id(movieid)
+        if status == "OK":
+            return jsonify(data), HTTPStatus.OK
         else:
-            return jsonify({'status': 'ERROR', 'message': 'No se encontró la película con el ID proporcionado.'}), HTTPStatus.NOT_FOUND
+            return jsonify({}), HTTPStatus.NOT_FOUND
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
@@ -209,14 +239,14 @@ async def http_get_cart():
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
-@app.route("/cart/<int:movie_id>", methods=["PUT"])
-async def http_add_to_cart(movie_id):
+@app.route("/cart/<int:movieid>", methods=["PUT"])
+async def http_add_to_cart(movieid):
     try:
         body = (await request.get_json(silent=True))
 
         user_id = body.get("user_id")
 
-        result = add_to_cart(user_id, movie_id)
+        result = add_to_cart(user_id, movieid)
         if result[1] == "OK":
             return jsonify({'status': 'OK', 'message': 'Película añadida al carrito.'}), HTTPStatus.OK
         else:
