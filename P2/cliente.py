@@ -91,16 +91,16 @@ def main():
         else:
             print("\tNo se encontraron películas.")
     
-    # r = requests.get(f"{CATALOG}/movies/99999999", headers=headers_alice)
-    # ok(f"Obtener detalles de la película con ID no válido", HTTPStatus.NOT_FOUND)
+    r = requests.get(f"{CATALOG}/movies/99999999", headers=headers_alice)
+    ok(f"Obtener detalles de la película con ID no válido", HTTPStatus.NOT_FOUND)
     
-    # r = requests.get(f"{CATALOG}/movies", params={"actor": "Tom Hardy"}, headers=headers_alice)
-    # if ok("Buscar películas en las que participa 'Tom Hardy'", r.status_code == HTTPStatus.OK and r.json()):
-    #     data = r.json()
-    #     if data:
-    #         for movie in data:
-    #             print(f"\t[{movie['movieid']}] {movie['title']}")
-    #             movieids.append(movie['movieid'])
+    r = requests.get(f"{CATALOG}/movies", params={"actor": "Tom Hardy"}, headers=headers_alice)
+    if ok("Buscar películas en las que participa 'Tom Hardy'", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        if data:
+            for movie in data:
+                print(f"\t[{movie['movieid']}] {movie['title']}")
+                movieids.append(movie['movieid'])
     
     print("# =======================================================")
     print("# Gestión del carrito de alice")
@@ -176,6 +176,28 @@ def main():
         ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
 
     
+    print("# =======================================================")
+    print("# Votar películas")
+    print("# =======================================================")
+
+    import random
+    for movieid in movieids:
+        r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": random.randint(0, 10)}, headers=headers_alice)
+        if ok(f"Votar película con ID [{movieid}]", r.status_code == HTTPStatus.OK):
+            print(f"\tPelícula con ID [{movieid}] votada correctamente")
+        else:
+            print(f"\tNo se pudo votar la película con ID [{movieid}]")
+
+    
+    r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": 99999999, "rating": random.randint(0, 10)}, headers=headers_alice)
+    ok(f"Votar película con ID [99999999] no válido", r.status_code == HTTPStatus.NOT_FOUND)
+
+    r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieids[0], "rating": -1}, headers=headers_alice)
+    ok(f"Votar película con ID [{movieids[0]}] con rating -1 no válido", r.status_code == HTTPStatus.BAD_REQUEST)
+
+    r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieids[0], "rating": 11}, headers=headers_alice)
+    ok(f"Votar película con ID [{movieids[0]}] con rating 11 no válido", r.status_code == HTTPStatus.BAD_REQUEST)
+
     print("# =======================================================")
     print("# Limpiar base de datos")
     print("# =======================================================")

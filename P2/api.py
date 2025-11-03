@@ -52,10 +52,10 @@ async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession
 # =============================================================================
 
 async def get_movies(params: dict = None):
-    conditions = []
+    query = "SELECT * FROM Peliculas p"
     query_params = {}
-    query = "SELECT * FROM Peliculas"
-    flag = 0
+    conditions = []
+    joins = []
 
     if params is None or not isinstance(params, dict):
         data = await fetch_all(engine, query, query_params)  # 👈 await
@@ -66,7 +66,6 @@ async def get_movies(params: dict = None):
     if "title" in params:
         conditions.append("title ILIKE :title")
         query_params["title"] = f"%{params['title']}%"
-        flag = 1
     if "year" in params and params["year"] != "":
         try:
             query_params["year"] = int(params["year"])
@@ -77,16 +76,19 @@ async def get_movies(params: dict = None):
     if "genre" in params:
         conditions.append("genre ILIKE :genre")
         query_params["genre"] = f"%{params['genre']}%"
-        flag = 1
-    if "actor" in params:
-        conditions.append("actor ILIKE :actor")
+    if "actor" in params and params["actor"]:
+        # Necesitamos JOIN con Participa y Actores
+        joins.append(" JOIN Participa pa ON pa.movieid = p.movieid")
+        joins.append(" JOIN Actores a   ON a.actor_id = pa.actor_id")
+        conditions.append("a.name ILIKE :actor")
         query_params["actor"] = f"%{params['actor']}%"
-        flag = 1
-
-    if flag == 1:
+        query +=  "".join(joins)
+    
+    if conditions:
         query += " WHERE " + " AND ".join(conditions)
 
     data = await fetch_all(engine, query, query_params)
+    
     if not data:
         return None, "ERROR"
     return data, "OK"
@@ -104,31 +106,39 @@ async def get_movies_by_id(movieid):
 # FUNCIONES DE GESTIÓN DE CARRITO
 # =============================================================================
 
-def get_cart(user_id, movieid=None):
+async def get_cart(user_id: str, movieid: int | None = None):
     query = """
-                SELECT p.movieid, p.name, p.description, p.year, p.genre, p.price
-                FROM Peliculas p
-                JOIN Pertenece pe ON p.movieid = pe.movieid
-                JOIN Carrito c ON pe.order_id = c.order_id
-                WHERE c.user_id = :user_id
-            """
-    
+        SELECT
+            p.movieid   AS movieid,
+            p.title     AS title,
+            p.description,
+            p.year,
+            p.genre,
+            p.price
+        FROM Carrito c
+        JOIN Usuario u        ON u.user_id = c.user_id
+        JOIN Carrito_Pelicula cp ON cp.cart_id = c.cart_id
+        JOIN Peliculas p         ON p.movieid = cp.movieid
+        WHERE c.user_id = :user_id
+    """
+
     params = {"user_id": user_id}
 
-    data = fetch_all(engine, query, params)
+    data = await fetch_all(engine, query, params)  # -> list[dict] | None
 
-    # Eliminar película específica si se proporciona movieid (no de la BBDD, solo de la consulta)
-    if movieid:
-        for i in range(len(data) - 1, -1, -1):
-            if data[i].get("movieid") == movieid:
-                data.pop(i)
-
-    if data.empty:
+    if not data:
         return None, "ERROR"
+
+    # Si te pasan movieid, lo quitas SOLO del resultado (no de la BBDD)
+    if movieid is not None:
+        data = [row for row in data if row.get("movieid") != movieid]
+
+    if not data:
+        return None, "ERROR"
+
     return data, "OK"
 
-def add_to_cart(user_id, movieid):
-    #NOTE: revisar esta query (crea el carrito si no existe y añade la película)
+async def add_to_cart(user_id, movieid):
     query = """
                 WITH upsert_carrito AS (
                     INSERT INTO Carrito (user_id)
@@ -151,7 +161,7 @@ def add_to_cart(user_id, movieid):
 
     params = {"user_id": user_id, "movieid": movieid}
 
-    data = fetch_all(engine, query, params)
+    data = await fetch_all(engine, query, params)
     if data.empty:
         return None, "ERROR"
     return data, "OK"
@@ -216,20 +226,20 @@ async def get_order(order_id):
     """
     params = {"order_id": order_id}
     order_data = await fetch_all(engine, query_order, params=params)
+
     if not order_data:
         return None, "ORDER_NOT_FOUND"
+        
     order_dict = {"order_id": order_data[0]["order_id"], "user_id": order_data[0]["user_id"], "total": order_data[0]["total"], "date": order_data[0]["date"]}
     # Obtener las películas del pedido
 
     query_movies = """
         SELECT m.movieid, m.title, m.price 
-        FROM Pelicula m
+        FROM Peliculas m
         JOIN Pedido_Pelicula pm ON m.movieid = pm.movieid
         WHERE pm.order_id = :order_id
     """
     movies_data = await fetch_all(engine, query_movies, params=params)
-    if movies_data.empty:
-        return None, "MOVIES_NOT_FOUND"
 
     movies_list = [
         {
@@ -241,6 +251,10 @@ async def get_order(order_id):
     ] if movies_data else []
 
     order_dict["movies"] = movies_list
+
+    if not movies_data or movies_data.empty:
+        return order_dict, "MOVIES_NOT_FOUND"
+
     return order_dict, "OK"
 
 async def new_balance(user_id, amount):
@@ -252,6 +266,49 @@ async def new_balance(user_id, amount):
     params = {"user_id": user_id, "amount": amount}
     return await fetch_all(engine, query, params=params)
 
+async def rate_movie(user_id, movieid, rating):
+    """
+    Califica una película.
+    
+    - Parámetros:
+        - user_id: ID del usuario que califica la película
+        - movieid: ID de la película que se califica
+        - rating: Calificación de la película
+    - Respuestas:
+        - "OK": Película calificada exitosamente
+        - "MOVIE_NOT_FOUND": No se encontró la película
+        - "CALIFICATION_FAILED": No se pudo calificar la película
+        - "UPDATE_MOVIE_FAILED": No se pudo actualizar la película
+    """
+
+    result = await get_movies_by_id(movieid)
+    if result[1] != "OK": return "MOVIE_NOT_FOUND"
+
+    query = """
+        INSERT INTO Calificacion (user_id, movieid, rating)
+        VALUES (:user_id, :movieid, :rating)
+        ON CONFLICT(user_id, movieid) DO UPDATE SET rating = :rating
+    """
+    params = {"user_id": user_id, "movieid": movieid, "rating": rating}
+    try:
+        result = await fetch_all(engine, query, params=params)
+        # No hay garantía de filas devueltas en UPDATE/INSERT
+    except Exception as exc:
+        return "CALIFICATION_FAILED"
+
+    query_update = """
+        UPDATE Peliculas
+        SET rating = (SELECT AVG(rating) FROM Calificacion WHERE movieid = :movieid),
+            votes = (SELECT COUNT(*) FROM Calificacion WHERE movieid = :movieid)
+        WHERE movieid = :movieid
+    """
+    params_update = {"movieid": movieid}
+    try:
+        result_upd = await fetch_all(engine, query_update, params=params_update)
+    except Exception as exc:
+        return "UPDATE_MOVIE_FAILED"
+
+    return "OK"
 # =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
@@ -378,31 +435,33 @@ async def add_movies_to_order(order_id):
 
 async def fetch_all(engine, query, params={}):
     async with engine.connect() as conn:
-        # Verificar si la query es de modificación (INSERT/UPDATE/DELETE) o solo lectura (SELECT)
         query_upper = query.strip().upper()
         is_modification = query_upper.startswith(('INSERT', 'UPDATE', 'DELETE'))
         
         if is_modification:
-            # Para operaciones de modificación, usar transacción con commit automático
             async with conn.begin():
-                result = await conn.execute(text(query), params)
-                if result.rowcount > 0:
-                    return True  # Operación exitosa
-                elif query_upper.startswith(('DELETE')) or query_upper.startswith(('INSERT')):
-                    return True  # No se borró nada, pero no es un error
-                else:
-                    return None  # No se afectaron filas
+                try:
+                    result = await conn.execute(text(query), params)
+                    if result.rowcount > 0:
+                        return True
+                    elif query_upper.startswith(('DELETE')) or query_upper.startswith(('INSERT')):
+                        return True
+                    else:
+                        return None
+                except Exception as exc:
+                    return None
         else:
-            # Para SELECT, solo leer datos sin commit
-            result = await conn.execute(text(query), params)
-            rows = result.all()
-            if len(rows) > 0:
-                keys = result.keys()
-                data = [dict(zip(keys, row)) for row in rows]
-                return data
-            else:
+            try:
+                result = await conn.execute(text(query), params)
+                rows = result.all()
+                if len(rows) > 0:
+                    keys = result.keys()
+                    data = [dict(zip(keys, row)) for row in rows]
+                    return data
+                else:
+                    return None
+            except Exception as exc:
                 return None
-
 # =============================================================================
 # SERVIDOR HTTP - API REST (QUART)
 # =============================================================================
@@ -450,9 +509,9 @@ async def http_get_cart():
 
         user_id = body.get("user_id")
 
-        result = get_cart(user_id)
-        if result[1] == "OK":
-            return jsonify({'status': 'OK', 'cart': result[0]}), HTTPStatus.OK
+        data, status = await get_cart(user_id)
+        if status == "OK":
+            return jsonify({'status': 'OK', 'cart': data[0]}), HTTPStatus.OK
         else:
             return jsonify({'status': 'ERROR', 'message': 'El carrito está vacío o no se encontró.'}), HTTPStatus.NOT_FOUND
     except Exception as exc:
@@ -620,11 +679,62 @@ async def http_get_order(order_id):
         HTTPStatus.IM_A_TEAPOT: {"status":"ERROR", "message": "El servidor se rehusa a preparar café porque es una tetera."} - El servidor se rehusa a preparar café porque es una tetera
     """
     try:
-        result = await get_order(order_id)
-        if result[1] == "OK":
-            return jsonify({'status': 'OK', 'order': result[0]}), HTTPStatus.OK
-        else:
+        result, status = await get_order(order_id)
+
+        if status == "OK":
+            return jsonify(result), HTTPStatus.OK
+        elif status == "ORDER_NOT_FOUND":
             return jsonify({'status': 'ERROR', 'message': 'No se encontró el pedido.'}), HTTPStatus.NOT_FOUND
+        elif status == "MOVIES_NOT_FOUND":
+            return jsonify(result), HTTPStatus.OK
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'No se encontró el pedido.'}), HTTPStatus.IM_A_TEAPOT
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+@app.route("/movies/calification", methods=["POST"])
+async def http_rate_movie():
+    """
+    Endpoint HTTP para calificar una película.
+    
+    - Método: POST
+    - Path: /movies/calification
+    - Comportamiento: Llama a rate_movie(movieid, rating)
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status":"OK", "message": "Película calificada exitosamente."} - Película calificada exitosamente
+        HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "No se encontró la película."} - No se encontró la película
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "No se pudo calificar la película."} - No se pudo calificar la película
+        HTTPStatus.IM_A_TEAPOT: {"status":"ERROR", "message": "El servidor se rehusa a preparar café porque es una tetera."} - El servidor se rehusa a preparar café porque es una tetera
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
+        
+        body = (await request.get_json(silent=True))
+        if not (movieid := body.get("movieid")):
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave \"movieid\"'}), HTTPStatus.BAD_REQUEST
+        if not (rating := body.get("rating")):
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave \"rating\"'}), HTTPStatus.BAD_REQUEST
+        if not (0 <= rating <= 10):
+            return jsonify({'status': 'ERROR', 'message': 'La calificación debe estar entre 0 y 10'}), HTTPStatus.BAD_REQUEST
+        
+        result = await rate_movie(user_id, movieid, rating)
+        if result == "OK":
+            return jsonify({'status': 'OK', 'message': 'Película calificada exitosamente.'}), HTTPStatus.OK
+        elif result == "MOVIE_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'No se encontró la película.'}), HTTPStatus.NOT_FOUND
+        elif result == "CALIFICATION_FAILED":
+            return jsonify({'status': 'ERROR', 'message': 'No se pudo calificar la película.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+        elif result == "UPDATE_MOVIE_FAILED":
+            return jsonify({'status': 'ERROR', 'message': 'No se pudo actualizar la película.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'El servidor se rehusa a preparar café porque es una tetera.'}), HTTPStatus.IM_A_TEAPOT
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 

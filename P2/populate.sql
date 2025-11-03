@@ -61,73 +61,75 @@ INSERT INTO Actores (name) VALUES
 ('Tom Hanks'),
 ('Jim Caviezel'),
 ('Asa Butterfield'),
-('Seth Rogen');
+('Seth Rogen'),
+('Tom Hardy');
 
 -- Insert Movies
-INSERT INTO Peliculas (title, description, year, genre, price) VALUES 
+INSERT INTO Peliculas (title, description, year, genre, price, rating, votes) VALUES 
 -- Star Wars Saga
-('Star Wars: Episode IV - A New Hope', 'The story of Luke Skywalker and the Rebellion against the Galactic Empire', 1977, 'Science Fiction', 12.99),
-('Star Wars: Episode V - The Empire Strikes Back', 'Luke learns about the Force while the Rebellion fights against the Empire', 1980, 'Science Fiction', 12.99),
-('Star Wars: Episode VI - Return of the Jedi', 'The final battle between good and evil in the galaxy', 1983, 'Science Fiction', 12.99),
-('Star Wars: Episode I - The Phantom Menace', 'The story of Anakin Skywalker and the invasion of Naboo', 1999, 'Science Fiction', 11.99),
-('Star Wars: Episode II - Attack of the Clones', 'Anakin becomes a Jedi while the galaxy prepares for war', 2002, 'Science Fiction', 11.99),
-('Star Wars: Episode III - Revenge of the Sith', 'The transformation of Anakin Skywalker into Darth Vader', 2005, 'Science Fiction', 11.99),
+('Star Wars: Episode IV - A New Hope', 'The story of Luke Skywalker and the Rebellion against the Galactic Empire', 1977, 'Science Fiction', 12.99, 0, 0),
+('Star Wars: Episode V - The Empire Strikes Back', 'Luke learns about the Force while the Rebellion fights against the Empire', 1980, 'Science Fiction', 12.99, 0, 0),
+('Star Wars: Episode VI - Return of the Jedi', 'The final battle between good and evil in the galaxy', 1983, 'Science Fiction', 12.99, 0, 0),
+('Star Wars: Episode I - The Phantom Menace', 'The story of Anakin Skywalker and the invasion of Naboo', 1999, 'Science Fiction', 11.99, 0, 0),
+('Star Wars: Episode II - Attack of the Clones', 'Anakin becomes a Jedi while the galaxy prepares for war', 2002, 'Science Fiction', 11.99, 0, 0),
+('Star Wars: Episode III - Revenge of the Sith', 'The transformation of Anakin Skywalker into Darth Vader', 2005, 'Science Fiction', 11.99, 0, 0),
 
 -- Harry Potter Saga
-('Harry Potter and the Philosopher''s Stone', 'A boy discovers he is a wizard and enters Hogwarts', 2001, 'Fantasy', 10.99),
-('Harry Potter and the Chamber of Secrets', 'Harry returns to Hogwarts where mysterious attacks occur', 2002, 'Fantasy', 10.99),
-('Harry Potter and the Prisoner of Azkaban', 'Harry discovers the truth about his parents and Sirius Black', 2004, 'Fantasy', 10.99),
-('Harry Potter and the Goblet of Fire', 'Harry participates in the Triwizard Tournament', 2005, 'Fantasy', 10.99),
-('Harry Potter and the Order of the Phoenix', 'Harry forms Dumbledore''s Army to fight against Voldemort', 2007, 'Fantasy', 10.99),
-('Harry Potter and the Half-Blood Prince', 'Harry learns about Voldemort''s past', 2009, 'Fantasy', 10.99),
-('Harry Potter and the Deathly Hallows Part 1', 'Harry, Ron and Hermione search for the Horcruxes', 2010, 'Fantasy', 10.99),
-('Harry Potter and the Deathly Hallows Part 2', 'The final battle between Harry and Voldemort', 2011, 'Fantasy', 10.99),
+('Harry Potter and the Philosopher''s Stone', 'A boy discovers he is a wizard and enters Hogwarts', 2001, 'Fantasy', 10.99, 0, 0),
+('Harry Potter and the Chamber of Secrets', 'Harry returns to Hogwarts where mysterious attacks occur', 2002, 'Fantasy', 10.99, 0, 0),
+('Harry Potter and the Prisoner of Azkaban', 'Harry discovers the truth about his parents and Sirius Black', 2004, 'Fantasy', 10.99, 0, 0),
+('Harry Potter and the Goblet of Fire', 'Harry participates in the Triwizard Tournament', 2005, 'Fantasy', 10.99, 0, 0),
+('Harry Potter and the Order of the Phoenix', 'Harry forms Dumbledore''s Army to fight against Voldemort', 2007, 'Fantasy', 10.99, 0, 0),
+('Harry Potter and the Half-Blood Prince', 'Harry learns about Voldemort''s past', 2009, 'Fantasy', 10.99, 0, 0),
+('Harry Potter and the Deathly Hallows Part 1', 'Harry, Ron and Hermione search for the Horcruxes', 2010, 'Fantasy', 10.99, 0, 0),
+('Harry Potter and the Deathly Hallows Part 2', 'The final battle between Harry and Voldemort', 2011, 'Fantasy', 10.99, 0, 0),
 
 -- The Hobbit and LOTR
-('The Hobbit: An Unexpected Journey', 'Bilbo Baggins joins an epic adventure with dwarves', 2012, 'Fantasy', 11.99),
-('The Hobbit: The Desolation of Smaug', 'Bilbo and the dwarves reach the Lonely Mountain', 2013, 'Fantasy', 11.99),
-('The Hobbit: The Battle of the Five Armies', 'The final battle for the Lonely Mountain', 2014, 'Fantasy', 11.99),
-('The Lord of the Rings: The Fellowship of the Ring', 'Frodo embarks on a journey to destroy the One Ring', 2001, 'Fantasy', 12.99),
-('The Lord of the Rings: The Two Towers', 'The Fellowship splits as Sauron grows stronger', 2002, 'Fantasy', 12.99),
-('The Lord of the Rings: The Return of the King', 'The final battle for Middle-earth', 2003, 'Fantasy', 12.99),
+('The Hobbit: An Unexpected Journey', 'Bilbo Baggins joins an epic adventure with dwarves', 2012, 'Fantasy', 11.99, 0, 0),
+('The Hobbit: The Desolation of Smaug', 'Bilbo and the dwarves reach the Lonely Mountain', 2013, 'Fantasy', 11.99, 0, 0),
+('The Hobbit: The Battle of the Five Armies', 'The final battle for the Lonely Mountain', 2014, 'Fantasy', 11.99, 0, 0),
+('The Lord of the Rings: The Fellowship of the Ring', 'Frodo embarks on a journey to destroy the One Ring', 2001, 'Fantasy', 12.99, 0, 0),
+('The Lord of the Rings: The Two Towers', 'The Fellowship splits as Sauron grows stronger', 2002, 'Fantasy', 12.99, 0, 0),
+('The Lord of the Rings: The Return of the King', 'The final battle for Middle-earth', 2003, 'Fantasy', 12.99, 0, 0),
 
 -- Pixar
-('Finding Nemo', 'A clownfish searches for his lost son in the ocean', 2003, 'Animation', 9.99),
-('Finding Dory', 'Dory searches for her parents with the help of her friends', 2016, 'Animation', 9.99),
+('Finding Nemo', 'A clownfish searches for his lost son in the ocean', 2003, 'Animation', 9.99, 0, 0),
+('Finding Dory', 'Dory searches for her parents with the help of her friends', 2016, 'Animation', 9.99, 0, 0),
 
 -- Studio Ghibli
-('Spirited Away', 'A young girl must work in a spiritual world to save her parents', 2001, 'Animation', 11.99),
-('My Neighbor Totoro', 'Two sisters discover magical creatures in the forest', 1988, 'Animation', 10.99),
-('Princess Mononoke', 'A young prince gets involved in a war between humans and gods', 1997, 'Animation', 11.99),
-('Howl''s Moving Castle', 'A young woman is transformed into an old woman and seeks help from a wizard', 2004, 'Animation', 11.99),
-('Kiki''s Delivery Service', 'A young witch opens a delivery service in a new city', 1989, 'Animation', 10.99),
+('Spirited Away', 'A young girl must work in a spiritual world to save her parents', 2001, 'Animation', 11.99, 0, 0),
+('My Neighbor Totoro', 'Two sisters discover magical creatures in the forest', 1988, 'Animation', 10.99, 0, 0),
+('Princess Mononoke', 'A young prince gets involved in a war between humans and gods', 1997, 'Animation', 11.99, 0, 0),
+('Howl''s Moving Castle', 'A young woman is transformed into an old woman and seeks help from a wizard', 2004, 'Animation', 11.99, 0, 0),
+('Kiki''s Delivery Service', 'A young witch opens a delivery service in a new city', 1989, 'Animation', 10.99, 0, 0),
 
 -- Anime
-('Your Name', 'Two teenagers swap bodies and fall in love', 2016, 'Romance/Anime', 12.99),
-('A Silent Voice', 'An ex-bully seeks redemption with a deaf girl', 2016, 'Drama/Anime', 11.99),
+('Your Name', 'Two teenagers swap bodies and fall in love', 2016, 'Romance/Anime', 12.99, 0, 0),
+('A Silent Voice', 'An ex-bully seeks redemption with a deaf girl', 2016, 'Drama/Anime', 11.99, 0, 0),
 
 -- Matrix (the good ones)
-('The Matrix', 'A programmer discovers he lives in a simulated reality', 1999, 'Science Fiction', 10.99),
-('The Matrix Reloaded', 'Neo fights against the machines while Zion prepares for war', 2003, 'Science Fiction', 10.99),
-('The Matrix Revolutions', 'The final battle between humans and machines', 2003, 'Science Fiction', 10.99),
+('The Matrix', 'A programmer discovers he lives in a simulated reality', 1999, 'Science Fiction', 10.99, 0, 0),
+('The Matrix Reloaded', 'Neo fights against the machines while Zion prepares for war', 2003, 'Science Fiction', 10.99, 0, 0),
+('The Matrix Revolutions', 'The final battle between humans and machines', 2003, 'Science Fiction', 10.99, 0, 0),
 
 -- Evangelion
-('Neon Genesis Evangelion: Death & Rebirth', 'Compilation and continuation of the Evangelion series', 1997, 'Anime/Science Fiction', 12.99),
-('The End of Evangelion', 'The alternate ending of the Evangelion series', 1997, 'Anime/Science Fiction', 12.99),
-('Evangelion: 1.0 You Are (Not) Alone', 'Evangelion reboot with new animation', 2007, 'Anime/Science Fiction', 11.99),
-('Evangelion: 2.0 You Can (Not) Advance', 'Second movie of the Evangelion reboot', 2009, 'Anime/Science Fiction', 11.99),
-('Evangelion: 3.0 You Can (Not) Redo', 'Third movie of the Evangelion reboot', 2012, 'Anime/Science Fiction', 11.99),
-('Evangelion: 3.0+1.0 Thrice Upon a Time', 'The final movie of the Evangelion reboot', 2021, 'Anime/Science Fiction', 12.99),
+('Neon Genesis Evangelion: Death & Rebirth', 'Compilation and continuation of the Evangelion series', 1997, 'Anime/Science Fiction', 12.99, 0, 0),
+('The End of Evangelion', 'The alternate ending of the Evangelion series', 1997, 'Anime/Science Fiction', 12.99, 0, 0),
+('Evangelion: 1.0 You Are (Not) Alone', 'Evangelion reboot with new animation', 2007, 'Anime/Science Fiction', 11.99, 0, 0),
+('Evangelion: 2.0 You Can (Not) Advance', 'Second movie of the Evangelion reboot', 2009, 'Anime/Science Fiction', 11.99, 0, 0),
+('Evangelion: 3.0 You Can (Not) Redo', 'Third movie of the Evangelion reboot', 2012, 'Anime/Science Fiction', 11.99, 0, 0),
+('Evangelion: 3.0+1.0 Thrice Upon a Time', 'The final movie of the Evangelion reboot', 2021, 'Anime/Science Fiction', 12.99, 0, 0),
 
 -- Other movies
-('The Passion of the Christ', 'The story of the last days of Jesus Christ', 2004, 'Religious Drama', 9.99),
-('Ender''s Game', 'A genius child is trained to lead the war against aliens', 2013, 'Science Fiction', 10.99),
-('Sausage Party', 'Supermarket foods discover their destiny', 2016, 'Animated Comedy', 8.99),
-('The Godfather', 'The story of an Italian mafia family in New York', 1972, 'Drama', 9.99),
-('Pulp Fiction', 'Intertwined crime stories in Los Angeles', 1994, 'Crime', 8.99),
-('The Dark Knight', 'Batman fights against the Joker in Gotham City', 2008, 'Action', 10.99),
-('Inception', 'A thief who steals secrets from dreams', 2010, 'Science Fiction', 12.99),
-('Gladiator', 'A gladiator joins the rebellion against the Roman Empire', 2000, 'Action', 10.99);
+('The Passion of the Christ', 'The story of the last days of Jesus Christ', 2004, 'Religious Drama', 9.99, 0, 0),
+('Ender''s Game', 'A genius child is trained to lead the war against aliens', 2013, 'Science Fiction', 10.99, 0, 0),
+('Sausage Party', 'Supermarket foods discover their destiny', 2016, 'Animated Comedy', 8.99, 0, 0),
+('The Godfather', 'The story of an Italian mafia family in New York', 1972, 'Drama', 9.99, 0, 0),
+('Pulp Fiction', 'Intertwined crime stories in Los Angeles', 1994, 'Crime', 8.99, 0, 0),
+('The Dark Knight', 'Batman fights against the Joker in Gotham City', 2008, 'Action', 10.99, 0, 0),
+('Inception', 'A thief who steals secrets from dreams', 2010, 'Science Fiction', 12.99, 0, 0),
+('Gladiator', 'A gladiator joins the rebellion against the Roman Empire', 2000, 'Action', 10.99, 0, 0),
+('Venom', 'A journalist becomes the host of an alien symbiote', 2018, 'Action', 11.99, 0, 0);
 
 -- Insert Participations (Actors in Movies)
 INSERT INTO Participa (actor_id, movieid) VALUES 
@@ -193,4 +195,5 @@ INSERT INTO Participa (actor_id, movieid) VALUES
 (43, 41), -- Tom Hanks in Ender's Game (ID 41)
 (44, 42), -- Jim Caviezel in Sausage Party (ID 42)
 (45, 43), -- Asa Butterfield in The Godfather (ID 43)
-(46, 44); -- Seth Rogen in Pulp Fiction (ID 44)
+(46, 44), -- Seth Rogen in Pulp Fiction (ID 44)
+(48, 47); -- Tom Hardy in Venom (ID 47)

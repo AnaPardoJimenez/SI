@@ -24,7 +24,18 @@ CREATE TABLE Peliculas (
     description VARCHAR(1023),
     year INT,
     genre VARCHAR(100),
-    price DECIMAL(10,2)
+    price DECIMAL(10,2),
+    rating DECIMAL(10,2),
+    votes INT
+);
+
+CREATE TABLE Calificacion (
+    user_id VARCHAR(37),
+    movieid INT,
+    rating DECIMAL(10,2),
+    PRIMARY KEY (user_id, movieid),
+    FOREIGN KEY (user_id) REFERENCES Usuario(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE
 );
 
 -- Tabla de Participación (Junction table para Actores-Películas)
