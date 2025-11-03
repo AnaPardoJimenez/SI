@@ -1,22 +1,6 @@
 -- Esquema de base de datos para sistema de películas
 -- Basado en el diagrama ERD proporcionado
 
--- Tabla de Actores
-CREATE TABLE Actores (
-    actor_id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL
-);
-
--- Tabla de Películas
-CREATE TABLE Peliculas (
-    movie_id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description VARCHAR(1023),
-    year INT,
-    genre VARCHAR(100),
-    price DECIMAL(10,2)
-);
-
 -- Tabla de Usuarios
 CREATE TABLE Usuario (
     user_id VARCHAR(37) NOT NULL PRIMARY KEY,
@@ -27,35 +11,67 @@ CREATE TABLE Usuario (
     admin BOOLEAN DEFAULT FALSE
 );
 
--- Tabla de Carrito/Órdenes
-CREATE TABLE Carrito (
-    order_id SERIAL PRIMARY KEY,
-    user_id VARCHAR(37) NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES Usuario(user_id)
+-- Tabla de Actores
+CREATE TABLE Actores (
+    actor_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+-- Tabla de Películas
+CREATE TABLE Peliculas (
+    movieid SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description VARCHAR(1023),
+    year INT,
+    genre VARCHAR(100),
+    price DECIMAL(10,2)
 );
 
 -- Tabla de Participación (Junction table para Actores-Películas)
 CREATE TABLE Participa (
     actor_id INT,
-    movie_id INT,
-    PRIMARY KEY (actor_id, movie_id),
+    movieid INT,
+    PRIMARY KEY (actor_id, movieid),
     FOREIGN KEY (actor_id) REFERENCES Actores(actor_id),
-    FOREIGN KEY (movie_id) REFERENCES Peliculas(movie_id)
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
+);
+
+-- Tabla de Carrito/Órdenes
+CREATE TABLE Carrito (
+    cart_id SERIAL PRIMARY KEY,
+    user_id VARCHAR(37) NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES Usuario(user_id)
 );
 
 -- Tabla de Pertenencia (Junction table para Carrito-Películas)
-CREATE TABLE Pertenece (
+CREATE TABLE Carrito_Pelicula (
+    cart_id INT,
+    movieid INT,
+    PRIMARY KEY (cart_id, movieid),
+    FOREIGN KEY (cart_id) REFERENCES Carrito(cart_id),
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
+);
+
+CREATE TABLE Pedido (
+    order_id INT PRIMARY KEY,
+    user_id VARCHAR(37) NOT NULL,
+    total DECIMAL(10,2) NOT NULL,
+    date TIMESTAMP NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES Usuario(user_id)
+);
+
+CREATE TABLE Pedido_Pelicula (
     order_id INT,
-    movie_id INT,
-    PRIMARY KEY (order_id, movie_id),
-    FOREIGN KEY (order_id) REFERENCES Carrito(order_id),
-    FOREIGN KEY (movie_id) REFERENCES Peliculas(movie_id)
+    movieid INT,
+    PRIMARY KEY (order_id, movieid),
+    FOREIGN KEY (order_id) REFERENCES Pedido(order_id),
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
 );
 
 -- Índices para mejorar el rendimiento
 -- CREATE INDEX idx_peliculas_year ON Peliculas(year);
 -- CREATE INDEX idx_peliculas_genre ON Peliculas(genre);
 -- CREATE INDEX idx_participa_actor ON Participa(actor_id);
--- CREATE INDEX idx_participa_movie ON Participa(movie_id);
+-- CREATE INDEX idx_participa_movie ON Participa(movieid);
 -- CREATE INDEX idx_pertenece_order ON Pertenece(order_id);
--- CREATE INDEX idx_pertenece_movie ON Pertenece(movie_id);
+-- CREATE INDEX idx_pertenece_movie ON Pertenece(movieid);
