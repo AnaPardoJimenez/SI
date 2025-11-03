@@ -83,12 +83,10 @@ async def get_movies(params: dict = None):
         conditions.append("a.name ILIKE :actor")
         query_params["actor"] = f"%{params['actor']}%"
         query +=  "".join(joins)
-    
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
 
     data = await fetch_all(engine, query, query_params)
-    
     if not data:
         return None, "ERROR"
     return data, "OK"
@@ -717,9 +715,9 @@ async def http_rate_movie():
             return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
         
         body = (await request.get_json(silent=True))
-        if not (movieid := body.get("movieid")):
+        if (movieid := body.get("movieid")) is None:
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave \"movieid\"'}), HTTPStatus.BAD_REQUEST
-        if not (rating := body.get("rating")):
+        if (rating := body.get("rating")) is None:
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave \"rating\"'}), HTTPStatus.BAD_REQUEST
         if not (0 <= rating <= 10):
             return jsonify({'status': 'ERROR', 'message': 'La calificación debe estar entre 0 y 10'}), HTTPStatus.BAD_REQUEST

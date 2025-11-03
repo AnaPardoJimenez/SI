@@ -51,11 +51,17 @@ Secret_uuid = uuid.UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
 # FUNCIONES AUXILIARES
 # =============================================================================
 
-def comprobar_token_admin(token):
+async def comprobar_token_admin(token):
     """
     Comprueba si el token es de administrador.
     """
-    return True
+    query = "SELECT admin FROM Usuario WHERE token LIKE :token"
+    params = {"token": token}
+    data = await fetch_all(engine, query, params)
+    if data and len(data) > 0:
+        return data[0]["admin"]
+    else:
+        return None
 
 async def fetch_all(engine, query, params={}):
     async with engine.connect() as conn:
@@ -177,6 +183,13 @@ async def delete_user(uid: str):
             - (True, "OK") si se eliminó correctamente
             - (False, "NOT_FOUND") si el usuario no existe
     """
+    query = "SELECT admin FROM Usuario WHERE user_id LIKE :uid"
+    params = {"uid": uid}
+    data = await fetch_all(engine, query, params)
+    if data and len(data) > 0:
+        if data[0]["admin"]:
+            return False, "FORBIDDEN"
+
     query = "SELECT name FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
     data = await fetch_all(engine, query, params)
@@ -221,15 +234,18 @@ async def http_create_user():
         body = (await request.get_json(silent=True))
         if body is None:
             return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
+
         
         # --- Autenticación: Bearer token ---
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
-            return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+            return jsonify({"status": 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+
 
         token = auth.split(" ", 1)[1].strip()
-        if not comprobar_token_admin(token):
-            return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+        if not await comprobar_token_admin(token):
+            return jsonify({"status": 'ERROR', 'message': 'Token no válido'}), HTTPStatus.UNAUTHORIZED
+
 
         name = body.get("name")
         if not name:
@@ -323,17 +339,20 @@ async def http_delete_user(uid):
         if not auth.startswith("Bearer "):
             return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
 
+
         token = auth.split(" ", 1)[1].strip()
-        if not comprobar_token_admin(token):
+        if not await comprobar_token_admin(token):
             return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+        
        
         success, error_code = await delete_user(uid)
-        
         if not success:
             # Errores de usuario
             if error_code == "NOT_FOUND":
                 return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
-            
+
+            elif error_code == "FORBIDDEN":
+                return jsonify({'status': 'ERROR', 'message': 'No se puede eliminar el usuario administrador'}), HTTPStatus.FORBIDDEN
             # Error desconocido
             return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST
         

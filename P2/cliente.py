@@ -1,3 +1,4 @@
+from math import e
 import requests
 from http import HTTPStatus
 
@@ -19,7 +20,7 @@ def main():
     r = requests.get(f"{USERS}/user", json={"name": "admin", "password": "admin"})
     if ok("Autenticar usuario administrador predefinido", r.status_code == HTTPStatus.OK):
         data = r.json()
-        _, token_admin = data["uid"], data["token"]
+        uid_admin, token_admin = data["uid"], data["token"]
     else:
         print("\nPruebas incompletas: Fin del test por error crítico")
         exit(-1)
@@ -35,6 +36,7 @@ def main():
         print("\nPruebas incompletas: Fin del test por error crítico")
         exit(-1)
 
+    # Test: Autenticar el usuario 'alice' recién creado
     r = requests.get(f"{USERS}/user", json={"name": "alice", "password": "secret"})
     if ok("Autenticar usuario 'alice'", r.status_code == HTTPStatus.OK and r.json()["uid"] == uid_alice):
         data = r.json()
@@ -42,12 +44,25 @@ def main():
     else:
         print("\nPruebas incompletas: Fin del test por error crítico")
 
+    # Test: Intentar borrar usuario administrador (debe fallar con FORBIDDEN)
+    r = requests.delete(f"{USERS}/user/{uid_admin}", headers=headers_admin)
+    ok("Borrar usuario administrador falla", r.status_code == HTTPStatus.FORBIDDEN)
+
     headers_alice = {"Authorization": f"Bearer {token_alice}"}
+
+    # Test: Intentar crear usuario con token de usuario no administrador (debe fallar con UNAUTHORIZED)
+    r = requests.put(f"{USERS}/user", json={"name": "aleatorio", "password": "aleatorio"}, headers=headers_alice)
+    ok("Crear usuario 'aleatorio' con token de usuario 'alice' falla", r.status_code == HTTPStatus.UNAUTHORIZED)
+
+    # Test: Intentar borrar usuario con su propio token (debe fallar con UNAUTHORIZED)
+    r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_alice)
+    ok("Borrar usuario 'alice' con token de usuario 'alice' falla", r.status_code == HTTPStatus.UNAUTHORIZED)
 
     print("# =======================================================")
     print("# Distintas consultas de alice al catálogo de películas")
     print("# =======================================================")
 
+    # Test: Obtener todas las películas del catálogo
     r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
     if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
         data = r.json()
@@ -57,6 +72,7 @@ def main():
         else:
             print("\tNo hay películas en el catálogo")
     
+    # Test: Buscar películas por título (búsqueda parcial con 'matrix')
     # Se asume que al menos hay una película que cumple la condición. Si no se reciben
     # los datos de ninguna película el test se da por no satisfecho
     r = requests.get(f"{CATALOG}/movies", params={"title": "matrix"}, headers=headers_alice)
@@ -66,9 +82,11 @@ def main():
             for movie in data:
                 print(f"\t[{movie['movieid']}] {movie['title']}")
 
+    # Test: Buscar películas con título inexistente (debe devolver lista vacía)
     r = requests.get(f"{CATALOG}/movies", params={"title": "No debe haber pelis con este título"}, headers=headers_alice)
     ok("Búsqueda fallida de películas por título", r.status_code == HTTPStatus.OK and not r.json())
     
+    # Test: Buscar películas por múltiples criterios (título, año y género)
     # Los ids de estas búsqueda se utilizarán después para las pruebas de la gestión
     # del carrito
     movieids = []
@@ -91,9 +109,15 @@ def main():
         else:
             print("\tNo se encontraron películas.")
     
+    # Test: Buscar películas con criterios que no coinciden (año 2025 no existe)
+    r = requests.get(f"{CATALOG}/movies", params={"title": "Gladiator", "year": 2025, "genre": "action"}, headers=headers_alice)
+    ok("Buscar películas por varios campos de movie fallida", r.status_code == HTTPStatus.OK and not r.json())
+    
+    # Test: Obtener detalles de una película con ID inexistente (debe devolver NOT_FOUND)
     r = requests.get(f"{CATALOG}/movies/99999999", headers=headers_alice)
     ok(f"Obtener detalles de la película con ID no válido", HTTPStatus.NOT_FOUND)
     
+    # Test: Buscar películas por actor (debe encontrar películas donde participa 'Tom Hardy')
     r = requests.get(f"{CATALOG}/movies", params={"actor": "Tom Hardy"}, headers=headers_alice)
     if ok("Buscar películas en las que participa 'Tom Hardy'", r.status_code == HTTPStatus.OK and r.json()):
         data = r.json()
@@ -101,6 +125,10 @@ def main():
             for movie in data:
                 print(f"\t[{movie['movieid']}] {movie['title']}")
                 movieids.append(movie['movieid'])
+
+    # Test: Buscar películas por actor inexistente (debe devolver lista vacía)
+    r = requests.get(f"{CATALOG}/movies", params={"actor": "Juan Larrondo"}, headers=headers_alice)
+    ok("Buscar películas en las que participa 'Juan Larrondo'", r.status_code == HTTPStatus.OK and not r.json())
     
     print("# =======================================================")
     print("# Gestión del carrito de alice")
@@ -172,6 +200,7 @@ def main():
                     print(f"\t- [{movie['movieid']}] {movie['title']} ({movie['price']})")
         
 
+        # Test: Verificar que el carrito está vacío después del checkout
         r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
         ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
 
@@ -181,20 +210,58 @@ def main():
     print("# =======================================================")
 
     import random
-    for movieid in movieids:
+
+    # Test: Obtener catálogo completo para votar películas
+    movieids = []
+    r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
+    if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for movie in data:
+                print(f"\t[{movie['movieid']}] {movie['title']}")
+                movieids.append(movie['movieid'])
+
+    # Test: Calificar películas con ratings aleatorios (0-10)
+    for movieid in movieids[:10]:
         r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": random.randint(0, 10)}, headers=headers_alice)
-        if ok(f"Votar película con ID [{movieid}]", r.status_code == HTTPStatus.OK):
-            print(f"\tPelícula con ID [{movieid}] votada correctamente")
+        ok(f"Votar película con ID [{movieid}]", r.status_code == HTTPStatus.OK)
+    # Test: Verificar que las calificaciones se actualizaron en el catálogo
+    r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
+    if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for movie in data:
+                print(f"\t[{movie['movieid']}] {movie['title']} - {movie['rating']} - {movie['votes']}")
         else:
-            print(f"\tNo se pudo votar la película con ID [{movieid}]")
+            print("\tNo hay películas en el catálogo")
+
+    # Test: Actualizar calificaciones de películas a 0
+    for movieid in movieids[:10]:
+        r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": 0}, headers=headers_alice)
+        ok(f"Votar película con ID [{movieid}] con rating 0", r.status_code == HTTPStatus.OK)
+    # Test: Calificar películas como administrador (rating 7.69)
+    for movieid in movieids[:10]:
+        r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": 7.69}, headers=headers_admin)
+        ok(f"Votar película con ID [{movieid}] con rating 7.69 como admin", r.status_code == HTTPStatus.OK)
+    # Test: Verificar que las calificaciones se actualizaron después de múltiples votos
+    r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
+    if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for movie in data:
+                print(f"\t[{movie['movieid']}] {movie['title']} - {movie['rating']} - {movie['votes']}")
+        else:
+            print("\tNo hay películas en el catálogo")
 
     
     r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": 99999999, "rating": random.randint(0, 10)}, headers=headers_alice)
     ok(f"Votar película con ID [99999999] no válido", r.status_code == HTTPStatus.NOT_FOUND)
 
+    # Test: Intentar calificar con rating negativo (debe fallar con BAD_REQUEST)
     r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieids[0], "rating": -1}, headers=headers_alice)
     ok(f"Votar película con ID [{movieids[0]}] con rating -1 no válido", r.status_code == HTTPStatus.BAD_REQUEST)
 
+    # Test: Intentar calificar con rating mayor a 10 (debe fallar con BAD_REQUEST)
     r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieids[0], "rating": 11}, headers=headers_alice)
     ok(f"Votar película con ID [{movieids[0]}] con rating 11 no válido", r.status_code == HTTPStatus.BAD_REQUEST)
 
@@ -202,9 +269,11 @@ def main():
     print("# Limpiar base de datos")
     print("# =======================================================")
     
+    # Test: Borrar usuario 'alice' con token de administrador
     r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
     ok("Borrar usuario alice", r.status_code == HTTPStatus.OK)
 
+    # Test: Intentar borrar un usuario que ya no existe (debe fallar con NOT_FOUND)
     r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
     ok("Borrar usuario inexistente", r.status_code == HTTPStatus.NOT_FOUND)
 
