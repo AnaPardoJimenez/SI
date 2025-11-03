@@ -32,15 +32,15 @@ CREATE TABLE Participa (
     actor_id INT,
     movieid INT,
     PRIMARY KEY (actor_id, movieid),
-    FOREIGN KEY (actor_id) REFERENCES Actores(actor_id),
-    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
+    FOREIGN KEY (actor_id) REFERENCES Actores(actor_id) ON DELETE CASCADE,
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE
 );
 
 -- Tabla de Carrito/Órdenes
 CREATE TABLE Carrito (
     cart_id SERIAL PRIMARY KEY,
     user_id VARCHAR(37) NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES Usuario(user_id)
+    FOREIGN KEY (user_id) REFERENCES Usuario(user_id) ON DELETE CASCADE
 );
 
 -- Tabla de Pertenencia (Junction table para Carrito-Películas)
@@ -48,8 +48,8 @@ CREATE TABLE Carrito_Pelicula (
     cart_id INT,
     movieid INT,
     PRIMARY KEY (cart_id, movieid),
-    FOREIGN KEY (cart_id) REFERENCES Carrito(cart_id),
-    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
+    FOREIGN KEY (cart_id) REFERENCES Carrito(cart_id) ON DELETE CASCADE,
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE
 );
 
 CREATE TABLE Pedido (
@@ -57,15 +57,15 @@ CREATE TABLE Pedido (
     user_id VARCHAR(37) NOT NULL,
     total DECIMAL(10,2) NOT NULL,
     date TIMESTAMP NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES Usuario(user_id)
+    FOREIGN KEY (user_id) REFERENCES Usuario(user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE Pedido_Pelicula (
     order_id INT,
     movieid INT,
     PRIMARY KEY (order_id, movieid),
-    FOREIGN KEY (order_id) REFERENCES Pedido(order_id),
-    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
+    FOREIGN KEY (order_id) REFERENCES Pedido(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE
 );
 
 -- Índices para mejorar el rendimiento
