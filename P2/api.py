@@ -342,23 +342,23 @@ async def checkout(token):
             - status: "OK" si el checkout fue exitoso, o código de error en caso contrario
     """
     # Obtener el ID del usuario
-    if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
+    if (user_id := await get_user_id(token)) is None: return None, "USER_NOT_FOUND"
     # Obtener el total del carrito
-    if (total := await get_cart_total(user_id)) == None: return None, "PRICE_NOT_FOUND"
+    if (total := await get_cart_total(user_id)) is None: return None, "PRICE_NOT_FOUND"
     # Obtener el saldo del usuario
-    if not (current_balance := await get_balance(user_id)): return None, "BALANCE_NOT_FOUND"
+    if (current_balance := await get_balance(user_id)) is None: return None, "BALANCE_NOT_FOUND"
     # Verificar si el saldo es suficiente para pagar el carrito
     if (current_balance - total) < 0: return None, "INSUFFICIENT_BALANCE"
 
     # Crear el pedido
-    if not (order_id := await create_order(user_id, total)): return None, "CREATE_ORDER_FAILED"
+    if (order_id := await create_order(user_id, total)) is not True: return None, "CREATE_ORDER_FAILED"
     # Añadir las películas al pedido
-    if not await add_movies_to_order(order_id): return None, "ADD_MOVIES_TO_ORDER_FAILED"
+    if (await add_movies_to_order(order_id)) is not True: return None, "ADD_MOVIES_TO_ORDER_FAILED"
 
     # Actualizar el saldo del usuario
-    if not await add_to_balance(user_id, -total): return None, "ADD_TO_BALANCE_FAILED"
+    if (await add_to_balance(user_id, -total)) is not True: return None, "ADD_TO_BALANCE_FAILED"
     # Eliminar las películas del carrito
-    if not await empty_cart(user_id): return None, "EMPTY_CART_FAILED"
+    if (await empty_cart(user_id)) is not True: return None, "EMPTY_CART_FAILED"
 
     query = """
         SELECT cart_id
@@ -799,7 +799,6 @@ async def http_get_movie_by_id(movieid):
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
 
-
 @app.route("/cart", methods=["GET"])
 async def http_get_cart():
     try:
@@ -825,7 +824,6 @@ async def http_get_cart():
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
 
-
 @app.route("/cart/<int:movieid>", methods=["PUT"])
 async def http_add_to_cart(movieid):
     try:
@@ -848,7 +846,6 @@ async def http_add_to_cart(movieid):
             return jsonify({'status': 'ERROR', 'message': 'No se pudo añadir la película al carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
-
 
 
 @app.route("/cart/<int:movieid>", methods=["DELETE"])

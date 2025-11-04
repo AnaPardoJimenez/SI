@@ -172,7 +172,7 @@ async def create_user(username, password):
 
     query = "INSERT INTO Usuario (user_id, name, password, token, balance, admin) \
                     VALUES (:user_id, :name, :password, :token, :balance, :admin)"
-    params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 100, "admin": False}
+    params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 0, "admin": False}
     await fetch_all(engine, query, params)
 
     query = "INSERT INTO Carrito (user_id) \
