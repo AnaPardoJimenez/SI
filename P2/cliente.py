@@ -302,6 +302,60 @@ def main():
     ok("actors=Tom Hardy,Keanu Reeves (sin co-protag) => lista vacía",
        r.status_code == HTTPStatus.OK and not r.json())
 
+    # ---------- 3) N negativo y N fuera del total ----------
+    # 3.1) N negativo -> esperamos 200 (el server puede normalizar a abs/ignorar LIMIT)
+    r = requests.get(f"{CATALOG}/movies", params={"N": -2}, headers=headers_alice)
+    ok("N=-2 (esperamos 200; comportamiento definido por el server)", r.status_code == HTTPStatus.IM_A_TEAPOT)
+
+    # 3.2) N enorme -> debe devolver todas las disponibles (<= N)
+    r = requests.get(f"{CATALOG}/movies", params={"N": 9999}, headers=headers_alice)
+    ok("N=9999 (<= total de películas)", r.status_code == HTTPStatus.OK and r.json() is not None)
+
+    # ---------- 4) actors + parámetros extra (inválidos/ignorados) ----------
+    # Se espera que la rama 'actors' ignore otros filtros
+    r = requests.get(
+        f"{CATALOG}/movies",
+        params={"actors": "Ellen DeGeneres,Albert Brooks,Alexander Gould", "year": "2003", "foo": "bar", "N": 2},
+        headers=headers_alice
+    )
+    if ok("actors (Finding Nemo trio) + extras ignorados + N=2", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for m in data:
+                print(f"\t[{m['movieid']}] {m['title']}")
+        else:
+            print("\t<lista vacía>  << debería salir 'Finding Nemo'")
+
+    # ---------- 5) Combinaciones de parámetros + N ----------
+    # 5.1) title + N (las Matrix)
+    r = requests.get(f"{CATALOG}/movies", params={"title": "matrix", "N": 2}, headers=headers_alice)
+    if ok("title='matrix' + N=2", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for m in data:
+                print(f"\t[{m['movieid']}] {m['title']}")
+        else:
+            print("\t<lista vacía>")
+
+    # 5.2) genre + year + N (Action, 2000 -> Gladiator)
+    r = requests.get(f"{CATALOG}/movies", params={"genre": "Action", "year": 2000, "N": 5}, headers=headers_alice)
+    if ok("genre=Action, year=2000, N=5 (espera Gladiator)", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for m in data:
+                print(f"\t[{m['movieid']}] {m['title']}")
+        else:
+            print("\t<lista vacía>  << debería estar 'Gladiator'")
+
+    # 5.3) actor (uno) + N  -> Tom Hardy (debe devolver 'Venom')
+    r = requests.get(f"{CATALOG}/movies", params={"actor": "Tom Hardy", "N": 3}, headers=headers_alice)
+    if ok("actor='Tom Hardy' + N=3 (espera 'Venom')", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for m in data:
+                print(f"\t[{m['movieid']}] {m['title']}")
+        else:
+            print("\t<lista vacía>  << debería estar 'Venom'")
     
     print("# =======================================================")
     print("# Limpiar base de datos")

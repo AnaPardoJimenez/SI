@@ -122,6 +122,8 @@ async def get_movies(params: dict = None):
             query_params["limit"] = int(params["N"])
         except (ValueError, TypeError):
             return {}, "ERROR"
+        if query_params["limit"] <= 0:
+            return None, "LIMIT_ERROR_VALUE"
         query += " ORDER BY p.votes DESC, p.rating DESC LIMIT :limit"
 
     data = await fetch_all(engine, query, query_params)
@@ -539,6 +541,8 @@ async def http_get_movies():
             return jsonify(data), HTTPStatus.OK
         elif status == "NOT_FOUND" and data is None:
             return jsonify({}), HTTPStatus.OK
+        elif status == "LIMIT_ERROR_VALUE":
+            return jsonify({}), HTTPStatus.IM_A_TEAPOT
 
         return jsonify({
             "status": "ERROR",
