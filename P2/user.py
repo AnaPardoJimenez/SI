@@ -122,7 +122,12 @@ async def create_user(username, password):
     params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 100, "admin": False}
     await fetch_all(engine, query, params)
 
-    return uid, True  # Se creó nuevo usuario
+    query = "INSERT INTO Carrito (user_id) \
+                    VALUES (:user_id)"
+    params = {"user_id": uid}
+    await fetch_all(engine, query, params
+)
+    return uid, True  # Se creó nuevo usuario y su carrito
 
 async def login_user(username, password):
     """

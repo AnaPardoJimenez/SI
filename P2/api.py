@@ -58,8 +58,28 @@ async def get_movies(params: dict = None):
     joins = []
 
     if params is None or not isinstance(params, dict):
-        data = await fetch_all(engine, query, query_params)  # 👈 await
-        if not data:
+        data = await fetch_all(engine, query, query_params)
+        if data is False:
+            return None, "NOT_FOUND"
+        elif data is None:
+            return None, "ERROR"
+        return data, "OK"
+
+    if "actors" in params and params["actors"]:
+        query = """
+            SELECT p.*
+                FROM Peliculas p
+                    JOIN Participa pa ON p.movieid = pa.movieid
+                    JOIN Actores a ON a.actor_id = pa.actor_id
+            WHERE a.name = ANY(:actor_names)
+            GROUP BY p.movieid, p.title, p.description, p.year, p.genre, p.price
+            HAVING COUNT(DISTINCT a.name) = CARDINALITY(:actor_names)
+        """
+        query_params = {"actor_names": params["actors"]}
+        data = await fetch_all(engine, query, query_params)
+        if data is False:
+            return None, "NOT_FOUND"
+        elif data is None:
             return None, "ERROR"
         return data, "OK"
 
@@ -87,7 +107,9 @@ async def get_movies(params: dict = None):
         query += " WHERE " + " AND ".join(conditions)
 
     data = await fetch_all(engine, query, query_params)
-    if not data:
+    if data is False:
+        return None, "NOT_FOUND"
+    elif data is None:
         return None, "ERROR"
     return data, "OK"
 
@@ -106,6 +128,14 @@ async def get_movies_by_id(movieid):
 
 async def get_cart(user_id: str, movieid: int | None = None):
     query = """
+    SELECT cart_id FROM Carrito WHERE user_id = :user_id
+    """
+    params = {"user_id": user_id}
+    data = await fetch_all(engine, query, params)
+    if not data:
+        return None, "NOT_FOUND"
+
+    query = """
         SELECT
             p.movieid   AS movieid,
             p.title     AS title,
@@ -123,50 +153,46 @@ async def get_cart(user_id: str, movieid: int | None = None):
     params = {"user_id": user_id}
 
     data = await fetch_all(engine, query, params)  # -> list[dict] | None
-
     if not data:
-        return None, "ERROR"
-
+        return None, "CART_EMPTY"
     # Si te pasan movieid, lo quitas SOLO del resultado (no de la BBDD)
     if movieid is not None:
         data = [row for row in data if row.get("movieid") != movieid]
-
     if not data:
         return None, "ERROR"
-
     return data, "OK"
 
 async def add_to_cart(user_id, movieid):
     query = """
-                WITH upsert_carrito AS (
-                    INSERT INTO Carrito (user_id)
-                    SELECT :user_id
-                    WHERE NOT EXISTS (SELECT 1 FROM Carrito WHERE user_id = :user_id)
-                    RETURNING order_id),
-                    
-                    carrito_objetivo AS (
-                    SELECT order_id FROM upsert_carrito
-                    UNION ALL
-                    SELECT order_id FROM Carrito WHERE user_id = :user_id
-                    LIMIT 1
-                )
-
-                INSERT INTO Pertenece (order_id, movieid)
-                SELECT order_id, :movieid
-                FROM carrito_objetivo
+                SELECT 1
+                FROM Carrito_Pelicula cp
+                JOIN Carrito c ON cp.cart_id = c.cart_id
+                WHERE c.user_id = :user_id
+                AND cp.movieid = :movieid;
+            """
+    params_check = {"user_id": user_id, "movieid": movieid}
+    existing = await fetch_all(engine, query, params_check)
+    if existing:
+        return "CONFLICT"
+    
+    query = """
+                INSERT INTO Carrito_Pelicula (cart_id, movieid)
+                SELECT cart_id, :movieid
+                FROM (SELECT cart_id FROM Carrito WHERE user_id = :user_id) AS user_cart
                 ON CONFLICT DO NOTHING
             """
-
+    
     params = {"user_id": user_id, "movieid": movieid}
 
-    data = await fetch_all(engine, query, params)
-    if data.empty:
-        return None, "ERROR"
-    return data, "OK"
+    ret = await fetch_all(engine, query, params)
+    if ret is True:
+        return "OK"
+    return "ERROR"
 
 async def delete_from_cart(movieid, token):
     result = await find_movie_in_cart(movieid, token)
-    if result[1] != "OK": return result[1]
+    if result[1] != "OK":
+        return result[1]
 
     user_id = result[0].get("user_id")
     query = """
@@ -178,9 +204,9 @@ async def delete_from_cart(movieid, token):
                 AND cp.movieid = :movieid 
     """
     params = {"movieid": movieid, "user_id": user_id}
-
     result = await fetch_all(engine, query, params=params)
-    if result: return "OK"
+    if result:
+        return "OK"
     return "ERROR"
 
 async def checkout(token):
@@ -191,7 +217,7 @@ async def checkout(token):
     # Obtener el saldo del usuario
     if not (current_balance := await get_balance(user_id)): return None, "BALANCE_NOT_FOUND"
     # Verificar si el saldo es suficiente para pagar el carrito
-    if (current_balance + total) < 0: return None, "INSUFFICIENT_BALANCE"
+    if (current_balance - total) < 0: return None, "INSUFFICIENT_BALANCE"
 
     # Crear el pedido
     if not (order_id := await create_order(user_id, total)): return None, "CREATE_ORDER_FAILED"
@@ -312,7 +338,8 @@ async def rate_movie(user_id, movieid, rating):
 # =============================================================================
 
 async def find_movie_in_cart(movieid, token):
-    if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
+    if not (user_id := await get_user_id(token)): 
+        return None, "USER_NOT_FOUND"
 
     query = """
         SELECT * 
@@ -323,7 +350,7 @@ async def find_movie_in_cart(movieid, token):
     """
     params = {"movieid": movieid, "user_id": user_id}
     data = await fetch_all(engine, query, params=params)
-    if data.empty:
+    if not data:
         return None, "MOVIE_NOT_FOUND"
     return data[0], "OK"
 
@@ -393,15 +420,6 @@ async def get_user_id(token):
         return None
 
 async def create_order(user_id, total):
-    async def create_cart(user_id):
-        query = """
-            INSERT INTO Carrito (user_id)
-            VALUES (:user_id)
-        """
-        params = {"user_id": user_id}
-        return await fetch_all(engine, query, params=params)
-
-    await create_cart(user_id)
     query = """
         SELECT cart_id
         FROM Carrito
@@ -409,9 +427,11 @@ async def create_order(user_id, total):
     """
     params = {"user_id": user_id}
     result = await fetch_all(engine, query, params=params)
-    if not result: return None
+    if not result:
+        return None
     cart_id = result[0]["cart_id"]
-    if not cart_id: return None
+    if not cart_id:
+        return None
 
     query = """
         INSERT INTO Pedido (order_id, user_id, total, date)
@@ -445,7 +465,7 @@ async def fetch_all(engine, query, params={}):
                     elif query_upper.startswith(('DELETE')) or query_upper.startswith(('INSERT')):
                         return True
                     else:
-                        return None
+                        return False
                 except Exception as exc:
                     return None
         else:
@@ -457,9 +477,10 @@ async def fetch_all(engine, query, params={}):
                     data = [dict(zip(keys, row)) for row in rows]
                     return data
                 else:
-                    return None
+                    return False
             except Exception as exc:
                 return None
+
 # =============================================================================
 # SERVIDOR HTTP - API REST (QUART)
 # =============================================================================
@@ -470,12 +491,20 @@ app = Quart(__name__)
 @app.route("/movies", methods=["GET"])
 async def http_get_movies():
     try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+
+        if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
+
         body = request.args.to_dict(flat=True)
 
         data, status = await get_movies(body)
         if status == "OK":
             return jsonify(data), HTTPStatus.OK
-        elif status == "ERROR" and data is None:
+        elif status == "NOT_FOUND" and data is None:
             return jsonify({}), HTTPStatus.OK
 
         return jsonify({
@@ -490,6 +519,14 @@ async def http_get_movies():
 @app.route("/movies/<int:movieid>", methods=["GET"])
 async def http_get_movie_by_id(movieid):
     try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+
+        if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
+
         data, status = await get_movies_by_id(movieid)
         if status == "OK":
             return jsonify(data), HTTPStatus.OK
@@ -503,13 +540,22 @@ async def http_get_movie_by_id(movieid):
 @app.route("/cart", methods=["GET"])
 async def http_get_cart():
     try:
-        body = (await request.get_json(silent=True))
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
 
-        user_id = body.get("user_id")
-
+        if not (user_id := await get_user_id(token)):
+            return None, "USER_NOT_FOUND"
+        
         data, status = await get_cart(user_id)
         if status == "OK":
-            return jsonify({'status': 'OK', 'cart': data[0]}), HTTPStatus.OK
+            return jsonify(data), HTTPStatus.OK
+        elif status == "NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'No se encontró el carrito.'}), HTTPStatus.NOT_FOUND
+        elif status == "CART_EMPTY":
+            return jsonify({}), HTTPStatus.OK
         else:
             return jsonify({'status': 'ERROR', 'message': 'El carrito está vacío o no se encontró.'}), HTTPStatus.NOT_FOUND
     except Exception as exc:
@@ -520,13 +566,19 @@ async def http_get_cart():
 @app.route("/cart/<int:movieid>", methods=["PUT"])
 async def http_add_to_cart(movieid):
     try:
-        body = (await request.get_json(silent=True))
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
 
-        user_id = body.get("user_id")
-
-        result = add_to_cart(user_id, movieid)
-        if result[1] == "OK":
+        if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
+    
+        status = await add_to_cart(user_id, movieid)
+        if status == "OK":
             return jsonify({'status': 'OK', 'message': 'Película añadida al carrito.'}), HTTPStatus.OK
+        elif status == "CONFLICT":
+            return jsonify({'status': 'ERROR', 'message': 'La película ya está en el carrito.'}), HTTPStatus.CONFLICT
         else:
             return jsonify({'status': 'ERROR', 'message': 'No se pudo añadir la película al carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
     except Exception as exc:
@@ -735,6 +787,11 @@ async def http_rate_movie():
             return jsonify({'status': 'ERROR', 'message': 'El servidor se rehusa a preparar café porque es una tetera.'}), HTTPStatus.IM_A_TEAPOT
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+@app.route("/movies", methods=["POST"])
+async def http_get_movies_by_actors():
+    pass
 
 # =============================================================================
 # PUNTO DE ENTRADA PRINCIPAL
