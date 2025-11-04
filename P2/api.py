@@ -331,7 +331,7 @@ async def checkout(token):
     2. Crea un pedido con las películas del carrito
     3. Añade las películas al pedido
     4. Actualiza el saldo del usuario
-    5. Vacía el carrito
+    5. Vacía el carrito y crea uno nuevo
     
     Args:
         token (str): Token de autenticación del usuario.
@@ -361,16 +361,16 @@ async def checkout(token):
     if (await empty_cart(user_id)) is not True: return None, "EMPTY_CART_FAILED"
 
     query = """
-        SELECT cart_id
-        FROM Carrito
+        SELECT order_id
+        FROM Pedido
         WHERE user_id = :user_id
     """
     params = {"user_id": user_id}
     result = await fetch_all(engine, query, params=params)
     if result:
-        return result[0]["cart_id"], "OK"
+        return result[0]["order_id"], "OK"
     else:
-        return None, "CART_ID_NOT_FOUND"
+        return None, "ORDER_ID_NOT_FOUND"
 
 async def get_order(order_id):
     """
@@ -608,7 +608,28 @@ async def empty_cart(user_id):
             WHERE cp.cart_id = c.cart_id
                 AND c.user_id = :user_id
     """
-    return await fetch_all(engine, query, params=params)
+    result = await fetch_all(engine, query, params=params)
+    if result is not True:
+        return False
+    
+    query = """
+        DELETE
+            FROM Carrito c
+            WHERE c.user_id = :user_id
+    """
+    params = {"user_id": user_id}
+    result = await fetch_all(engine, query, params=params)
+    if result is not True:
+        return False
+
+    query = """
+        INSERT INTO Carrito (user_id)
+        VALUES (:user_id)
+    """
+    result = await fetch_all(engine, query, params=params)
+    if result is not True:
+        return False
+    return True
 
 async def get_user_id(token):
     """
@@ -925,8 +946,8 @@ async def http_checkout():
             return jsonify({'status': 'ERROR', 'message': 'No se pudo actualizar el saldo.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         elif result == "EMPTY_CART_FAILED":
             return jsonify({'status': 'ERROR', 'message': 'No se pudo vaciar el carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
-        elif result == "CART_ID_NOT_FOUND":
-            return jsonify({'status': 'ERROR', 'message': 'No existe carrito para el usuario.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+        elif result == "ORDER_ID_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'No existe pedido para el usuario.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         elif result == "CREATE_ORDER_FAILED":
             return jsonify({'status': 'ERROR', 'message': 'No se pudo crear el pedido.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         elif result == "ADD_MOVIES_TO_ORDER_FAILED":
