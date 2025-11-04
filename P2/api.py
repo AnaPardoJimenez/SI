@@ -5,16 +5,21 @@ Este módulo implementa un sistema de catálogo de películas con carrito de com
 y gestión de pedidos, expuesto a través de una API REST construida con Quart.
 
 Funcionalidades principales:
-    - Búsqueda y filtrado de películas por diversos criterios
+    - Búsqueda y filtrado de películas por diversos criterios (título, año, género, actor)
+    - Búsqueda por conjunto de actores (todos deben aparecer en la película)
+    - Obtención de top N películas ordenadas por votos y rating
     - Gestión del carrito de compra por usuario
     - Procesamiento de pedidos y checkout
     - Gestión del saldo de usuarios
+    - Sistema de calificación de películas por usuarios
     - API REST con endpoints HTTP asíncronos
+    - Autenticación mediante tokens Bearer
 
 Estructura de datos:
     - Películas: almacenadas en base de datos PostgreSQL
     - Carritos y pedidos: persistentes en base de datos
     - Historial de transacciones por usuario
+    - Calificaciones de películas por usuarios
 
 Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
 Fecha de creación: 28-10-2025
@@ -27,6 +32,17 @@ Uso:
     python api.py
     
 El servidor se ejecutará en http://0.0.0.0:5051
+
+Endpoints principales:
+    GET  /movies              - Buscar películas con filtros opcionales
+    GET  /movies/<movieid>    - Obtener detalles de una película
+    GET  /cart                - Obtener carrito del usuario
+    PUT  /cart/<movieid>      - Añadir película al carrito
+    DELETE /cart/<movieid>    - Eliminar película del carrito
+    POST /cart/checkout       - Procesar pedido del carrito
+    GET  /orders/<order_id>   - Obtener detalles de un pedido
+    POST /user/credit         - Actualizar saldo del usuario
+    POST /movies/calification - Calificar una película
 """
 
 import os
@@ -52,6 +68,25 @@ async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession
 # =============================================================================
 
 async def get_movies(params: dict = None):
+    """
+    Obtiene películas del catálogo con filtros opcionales.
+    
+    Parámetros soportados:
+        - title: Búsqueda parcial por título (case-insensitive)
+        - year: Filtro por año exacto
+        - genre: Búsqueda parcial por género (case-insensitive)
+        - actor: Búsqueda parcial por nombre de actor (case-insensitive)
+        - actors: Lista de actores separados por comas (todos deben aparecer en la película)
+        - N: Limitar resultados a las N películas con más votos y mejor rating
+    
+    Args:
+        params (dict, optional): Diccionario con parámetros de búsqueda.
+    
+    Returns:
+        tuple: (data, status)
+            - data: Lista de diccionarios con información de películas o None
+            - status: "OK", "NOT_FOUND", "ERROR", o "LIMIT_ERROR_VALUE"
+    """
     query = "SELECT p.* FROM Peliculas p"
     query_params = {}
     conditions = []
@@ -134,6 +169,17 @@ async def get_movies(params: dict = None):
     return data, "OK"
 
 async def get_movies_by_id(movieid):
+    """
+    Obtiene los detalles de una película por su ID.
+    
+    Args:
+        movieid (int): ID de la película a buscar.
+    
+    Returns:
+        tuple: (data, status)
+            - data: Diccionario con información de la película o None
+            - status: "OK", "NOT_FOUND", o "ERROR"
+    """
     query = "SELECT * FROM Peliculas WHERE movieid = :movieid"
     params = {"movieid": movieid}
 
@@ -149,6 +195,19 @@ async def get_movies_by_id(movieid):
 # =============================================================================
 
 async def get_cart(user_id: str, movieid: int | None = None):
+    """
+    Obtiene el contenido del carrito de un usuario.
+    
+    Args:
+        user_id (str): ID del usuario.
+        movieid (int, optional): Si se especifica, excluye esta película del resultado
+                                (no la elimina de la base de datos).
+    
+    Returns:
+        tuple: (data, status)
+            - data: Lista de diccionarios con películas del carrito o None
+            - status: "OK", "CART_EMPTY", "NOT_FOUND", o "ERROR"
+    """
     query = """
     SELECT cart_id FROM Carrito WHERE user_id = :user_id
     """
@@ -191,6 +250,17 @@ async def get_cart(user_id: str, movieid: int | None = None):
     return data, "OK"
 
 async def add_to_cart(user_id, movieid):
+    """
+    Añade una película al carrito de un usuario.
+    
+    Args:
+        user_id (str): ID del usuario.
+        movieid (int): ID de la película a añadir.
+    
+    Returns:
+        str: "OK" si se añadió correctamente, "CONFLICT" si la película ya está
+             en el carrito, "NOT_FOUND" si no se encontró el carrito, o "ERROR"
+    """
     query = """
                 SELECT 1
                 FROM Carrito_Pelicula cp
@@ -220,6 +290,17 @@ async def add_to_cart(user_id, movieid):
     return "ERROR"
 
 async def delete_from_cart(movieid, token):
+    """
+    Elimina una película del carrito de un usuario.
+    
+    Args:
+        movieid (int): ID de la película a eliminar.
+        token (str): Token de autenticación del usuario.
+    
+    Returns:
+        str: "OK" si se eliminó correctamente, "NOT_FOUND" si no se encontró,
+             o "ERROR" en caso de error
+    """
     result = await find_movie_in_cart(movieid, token)
     if result[1] != "OK":
         return result[1]
@@ -242,6 +323,24 @@ async def delete_from_cart(movieid, token):
     return "ERROR"
 
 async def checkout(token):
+    """
+    Procesa el checkout del carrito del usuario autenticado.
+    
+    Realiza las siguientes operaciones:
+    1. Verifica que el usuario tenga saldo suficiente
+    2. Crea un pedido con las películas del carrito
+    3. Añade las películas al pedido
+    4. Actualiza el saldo del usuario
+    5. Vacía el carrito
+    
+    Args:
+        token (str): Token de autenticación del usuario.
+    
+    Returns:
+        tuple: (cart_id, status)
+            - cart_id: ID del carrito (que coincide con order_id) o None
+            - status: "OK" si el checkout fue exitoso, o código de error en caso contrario
+    """
     # Obtener el ID del usuario
     if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
     # Obtener el total del carrito
@@ -274,6 +373,17 @@ async def checkout(token):
         return None, "CART_ID_NOT_FOUND"
 
 async def get_order(order_id):
+    """
+    Obtiene los detalles de un pedido, incluyendo las películas asociadas.
+    
+    Args:
+        order_id (int): ID del pedido.
+    
+    Returns:
+        tuple: (order_dict, status)
+            - order_dict: Diccionario con información del pedido y sus películas o None
+            - status: "OK", "ORDER_NOT_FOUND", "MOVIES_NOT_FOUND", o "ERROR"
+    """
     # Obtener los datos del pedido
     query_order = """
         SELECT *
@@ -315,6 +425,16 @@ async def get_order(order_id):
     return order_dict, "OK"
 
 async def new_balance(user_id, amount):
+    """
+    Establece el saldo de un usuario a un valor específico (no suma, reemplaza).
+    
+    Args:
+        user_id (str): ID del usuario.
+        amount (float): Nuevo saldo a establecer.
+    
+    Returns:
+        bool: True si se actualizó correctamente, False en caso contrario
+    """
     query = """
         UPDATE Usuario 
         SET balance = :amount
@@ -371,6 +491,18 @@ async def rate_movie(user_id, movieid, rating):
 # =============================================================================
 
 async def find_movie_in_cart(movieid, token):
+    """
+    Busca una película en el carrito del usuario autenticado.
+    
+    Args:
+        movieid (int): ID de la película a buscar.
+        token (str): Token de autenticación del usuario.
+    
+    Returns:
+        tuple: (data, status)
+            - data: Diccionario con información de la película en el carrito o None
+            - status: "OK", "USER_NOT_FOUND", "MOVIE_NOT_FOUND", o "ERROR"
+    """
     if not (user_id := await get_user_id(token)): 
         return None, "USER_NOT_FOUND"
 
@@ -390,6 +522,15 @@ async def find_movie_in_cart(movieid, token):
     return data[0], "OK"
 
 async def get_balance(user_id):
+    """
+    Obtiene el saldo actual de un usuario.
+    
+    Args:
+        user_id (str): ID del usuario.
+    
+    Returns:
+        float: Saldo del usuario o None si no se encontró el usuario
+    """
     query = """
         SELECT balance
             FROM Usuario
@@ -403,6 +544,16 @@ async def get_balance(user_id):
         return None
 
 async def add_to_balance(user_id, amount):
+    """
+    Suma (o resta si es negativo) una cantidad al saldo de un usuario.
+    
+    Args:
+        user_id (str): ID del usuario.
+        amount (float): Cantidad a sumar (puede ser negativa para restar).
+    
+    Returns:
+        bool: True si se actualizó correctamente, False en caso contrario
+    """
     query = """
         UPDATE Usuario 
         SET balance = balance + :amount
@@ -412,6 +563,15 @@ async def add_to_balance(user_id, amount):
     return await fetch_all(engine, query, params=params)
 
 async def get_cart_total(user_id):
+    """
+    Calcula el precio total de todas las películas en el carrito de un usuario.
+    
+    Args:
+        user_id (str): ID del usuario.
+    
+    Returns:
+        float: Precio total del carrito, 0.0 si está vacío, o None en caso de error
+    """
     query = """
         SELECT SUM(p.price) as total
             FROM Carrito c
@@ -431,6 +591,15 @@ async def get_cart_total(user_id):
         return None
 
 async def empty_cart(user_id):
+    """
+    Elimina todas las películas del carrito de un usuario.
+    
+    Args:
+        user_id (str): ID del usuario.
+    
+    Returns:
+        bool: True si se vació correctamente, False en caso contrario
+    """
     params = {"user_id": user_id}
     query = """
         DELETE
@@ -442,6 +611,15 @@ async def empty_cart(user_id):
     return await fetch_all(engine, query, params=params)
 
 async def get_user_id(token):
+    """
+    Obtiene el ID de usuario a partir de su token de autenticación.
+    
+    Args:
+        token (str): Token de autenticación.
+    
+    Returns:
+        str: ID del usuario o None si el token no es válido
+    """
     query = """
         SELECT user_id 
             FROM Usuario 
@@ -455,6 +633,18 @@ async def get_user_id(token):
         return None
 
 async def create_order(user_id, total):
+    """
+    Crea un nuevo pedido a partir del carrito del usuario.
+    
+    El order_id del pedido se establece igual al cart_id del carrito.
+    
+    Args:
+        user_id (str): ID del usuario.
+        total (float): Precio total del pedido.
+    
+    Returns:
+        list: Lista con el resultado de la inserción (con order_id) o None si falló
+    """
     query = """
         SELECT cart_id
         FROM Carrito
@@ -477,6 +667,15 @@ async def create_order(user_id, total):
     return await fetch_all(engine, query, params=params)
 
 async def add_movies_to_order(order_id):
+    """
+    Copia todas las películas del carrito al pedido.
+    
+    Args:
+        order_id (int): ID del pedido (que coincide con cart_id).
+    
+    Returns:
+        bool: True si se añadieron correctamente, False en caso contrario
+    """
     query = """
         INSERT INTO Pedido_Pelicula (order_id, movieid)
         SELECT :order_id, movieid
@@ -487,6 +686,27 @@ async def add_movies_to_order(order_id):
     return await fetch_all(engine, query, params=params)
 
 async def fetch_all(engine, query, params={}):
+    """
+    Ejecuta una consulta SQL de forma asíncrona.
+    
+    Maneja tanto consultas de lectura (SELECT) como de modificación (INSERT, UPDATE, DELETE).
+    Para consultas de modificación, usa transacciones con commit automático.
+    
+    Args:
+        engine: Motor de SQLAlchemy para la conexión.
+        query (str): Consulta SQL a ejecutar.
+        params (dict, optional): Parámetros para la consulta preparada.
+    
+    Returns:
+        Para SELECT:
+            - list: Lista de diccionarios con los resultados
+            - False: Si no hay resultados
+            - None: Si hay un error
+        Para INSERT/UPDATE/DELETE:
+            - True: Si la operación afectó filas o fue exitosa
+            - False: Si no se afectaron filas (UPDATE)
+            - None: Si hay un error
+    """
     async with engine.connect() as conn:
         query_upper = query.strip().upper()
         is_modification = query_upper.startswith(('INSERT', 'UPDATE', 'DELETE'))
@@ -734,7 +954,7 @@ async def http_new_balance():
         HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Parámetros faltantes
         HTTPStatus.UNAUTHORIZED: {"status":"ERROR", "message": "Credenciales incorrectas"} - Contraseña incorrecta
         HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "Usuario no encontrado"} - Usuario no existe
-        HTTPStatus.INTERNAL_SERVER_ERROR.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Error interno del servidor o del sistema de archivos
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno del servidor
     """
     try:
         auth = request.headers.get("Authorization", "")
@@ -834,13 +1054,10 @@ async def http_rate_movie():
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
 
-@app.route("/movies", methods=["POST"])
-async def http_get_movies_by_actors():
-    pass
 
 # =============================================================================
 # PUNTO DE ENTRADA PRINCIPAL
 # =============================================================================
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5051, debug=True)
+    app.run(host="0.0.0.0", port=5051)

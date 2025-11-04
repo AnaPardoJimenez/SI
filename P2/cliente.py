@@ -1,16 +1,73 @@
+"""
+cliente.py - Cliente de Pruebas para el Sistema de Catálogo de Películas
+
+Este módulo implementa un cliente de pruebas completo que verifica todas las
+funcionalidades del sistema de catálogo de películas y gestión de usuarios.
+
+Funcionalidades probadas:
+    - Creación y autenticación de usuarios
+    - Búsqueda y filtrado de películas (título, año, género, actor)
+    - Búsqueda por conjunto de actores
+    - Obtención de top N películas
+    - Gestión del carrito de compra (añadir, eliminar, obtener)
+    - Procesamiento de pedidos (checkout)
+    - Gestión de saldo de usuarios
+    - Sistema de calificación de películas
+
+El cliente realiza pruebas exhaustivas de todos los endpoints de la API y
+valida que las respuestas sean correctas según los casos de uso esperados.
+
+Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
+Fecha de creación: 28-10-2025
+Última modificación: 28-10-2025
+Versión: 1.0.0
+Python: 3.7+
+Dependencias: requests
+
+Uso:
+    python cliente.py
+    
+Requisitos:
+    - Servidor de usuarios corriendo en http://127.0.0.1:5050
+    - Servidor de catálogo corriendo en http://127.0.0.1:5051
+    - Base de datos PostgreSQL inicializada con schema.sql y populate.sql
+"""
+
 from math import e
 import requests
 from http import HTTPStatus
 
+# URLs de los servicios
 USERS = "http://127.0.0.1:5050"
 CATALOG = "http://127.0.0.1:5051"
 
 def ok(name, cond):
+    """
+    Función auxiliar para imprimir el resultado de una prueba.
+    
+    Args:
+        name (str): Nombre descriptivo de la prueba.
+        cond (bool): Condición que indica si la prueba pasó o falló.
+    
+    Returns:
+        bool: El valor de cond (útil para encadenar condiciones).
+    """
     status = "OK" if cond else "FAIL"
     print(f"[{status}] {name}")
     return cond
 
 def main():
+    """
+    Función principal que ejecuta todas las pruebas del sistema.
+    
+    Las pruebas se organizan en secciones:
+    1. Creación y autenticación de usuarios
+    2. Consultas al catálogo de películas
+    3. Gestión del carrito de compra
+    4. Sistema de votación de películas
+    5. Pruebas de búsqueda por actores y parámetro N
+    6. Limpieza de la base de datos
+    """
 
     print("# =======================================================")
     print("# Creación y autenticación de usuarios para el test")

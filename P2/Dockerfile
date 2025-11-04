@@ -1,5 +1,23 @@
 # ==============================================================================
-# Dockerfile - Sistema de Gestión de Usuarios y Archivos con API REST
+# Dockerfile - Contenedor Docker para Sistema de Catálogo de Películas
+# ==============================================================================
+#
+# Este Dockerfile crea una imagen base para ejecutar los servicios del sistema
+# de catálogo de películas y gestión de usuarios.
+#
+# La imagen incluye:
+#   - Python 3.12
+#   - Dependencias del proyecto (requirements.txt)
+#   - Código fuente del proyecto
+#
+# Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
+# Fecha de creación: 28-10-2025
+# Última modificación: 28-10-2025
+#
+# Uso:
+#   Este Dockerfile se utiliza automáticamente por docker-compose.yml
+#   para construir los contenedores de los servicios.
+#
 # ==============================================================================
 
 # Imagen base: Python 3.12 oficial
@@ -14,7 +32,7 @@ COPY requirements.txt requirements.txt
 # Instalar dependencias sin caché para reducir tamaño de imagen
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el resto del código al contenedor (api.py, user.py, cliente.py, etc.)
+# Copiar el resto del código al contenedor (api.py, user.py, cliente.py, schema.sql, etc.)
 COPY . .
 
 # Exponer ambos puertos (los usará docker-compose)

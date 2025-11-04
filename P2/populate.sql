@@ -1,10 +1,44 @@
--- Data to populate the movie system tables
--- Includes Star Wars, Harry Potter, LOTR, Ghibli, Evangelion and more!
+-- =============================================================================
+-- populate.sql - Script de Población de Base de Datos
+-- =============================================================================
+-- 
+-- Este script inserta datos iniciales en las tablas del sistema de catálogo
+-- de películas. Incluye películas de diversas sagas populares y sus actores
+-- asociados.
+--
+-- Datos incluidos:
+--   - Usuario administrador por defecto (admin/admin)
+--   - Actores de diversas películas y sagas
+--   - Películas de Star Wars, Harry Potter, LOTR/Hobbit, Studio Ghibli,
+--     Matrix, Evangelion, Pixar y otras películas populares
+--   - Relaciones de participación de actores en películas
+--
+-- Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
+-- Fecha de creación: 28-10-2025
+-- Última modificación: 28-10-2025
+--
+-- Uso:
+--   Este script se ejecuta automáticamente al inicializar la base de datos
+--   con Docker Compose (ver docker-compose.yml).
+--
+-- Nota: Este script debe ejecutarse después de schema.sql para que las
+--       tablas existan previamente.
+--
+-- =============================================================================
+
+-- Usuario administrador por defecto
+-- Credenciales: name='admin', password='admin'
+-- Token: f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827
+-- Saldo inicial: 15000.00
+-- =============================================================================
 
 INSERT INTO Usuario (user_id, name, password, token, balance, admin) VALUES
-('123e4567-e89b-12d3-a456-426614174000', 'admin', 'admin', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 15000.00, TRUE);
+('123e4567-e89b-12d3-a456-426614174000', 'admin', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 15000.00, TRUE);
 
--- Insert Actors
+-- =============================================================================
+-- Insertar Actores
+-- =============================================================================
+-- Se insertan actores de diversas sagas y películas populares
 INSERT INTO Actores (name) VALUES 
 -- Star Wars
 ('Mark Hamill'),
@@ -64,7 +98,15 @@ INSERT INTO Actores (name) VALUES
 ('Seth Rogen'),
 ('Tom Hardy');
 
--- Insert Movies
+-- =============================================================================
+-- Insertar Películas
+-- =============================================================================
+-- Se insertan películas de diversas sagas con sus metadatos:
+--   - Título y descripción
+--   - Año de lanzamiento
+--   - Género
+--   - Precio de venta
+--   - Rating y votos iniciales (0, se actualizan con calificaciones)
 INSERT INTO Peliculas (title, description, year, genre, price, rating, votes) VALUES 
 -- Star Wars Saga
 ('Star Wars: Episode IV - A New Hope', 'The story of Luke Skywalker and the Rebellion against the Galactic Empire', 1977, 'Science Fiction', 12.99, 0, 0),
@@ -131,7 +173,12 @@ INSERT INTO Peliculas (title, description, year, genre, price, rating, votes) VA
 ('Gladiator', 'A gladiator joins the rebellion against the Roman Empire', 2000, 'Action', 10.99, 0, 0),
 ('Venom', 'A journalist becomes the host of an alien symbiote', 2018, 'Action', 11.99, 0, 0);
 
--- Insert Participations (Actors in Movies)
+-- =============================================================================
+-- Insertar Participaciones (Actores en Películas)
+-- =============================================================================
+-- Se establecen las relaciones entre actores y películas en las que participan.
+-- Cada tupla (actor_id, movieid) representa la participación de un actor
+-- en una película específica.
 INSERT INTO Participa (actor_id, movieid) VALUES 
 -- Star Wars
 (1, 1), (2, 1), (3, 1), -- Mark Hamill, Harrison Ford, Carrie Fisher in A New Hope

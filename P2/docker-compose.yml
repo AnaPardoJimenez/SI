@@ -1,4 +1,29 @@
+# =============================================================================
+# docker-compose.yml - Configuración Docker Compose para Sistema de Películas
+# =============================================================================
+#
+# Este archivo define la configuración de los servicios del sistema:
+#   - db: Base de datos PostgreSQL
+#   - user_api: Servidor de gestión de usuarios (puerto 5050)
+#   - api_api: Servidor de catálogo de películas (puerto 5051)
+#
+# Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
+# Fecha de creación: 28-10-2025
+# Última modificación: 28-10-2025
+#
+# Uso:
+#   docker-compose up -d    # Iniciar servicios en segundo plano
+#   docker-compose down     # Detener y eliminar contenedores
+#   docker-compose logs     # Ver logs de los servicios
+#
+# =============================================================================
+
 services:
+  # -----------------------------------------------------------------------------
+  # Base de Datos PostgreSQL
+  # -----------------------------------------------------------------------------
+  # Contenedor de base de datos que almacena usuarios, películas, carritos y pedidos.
+  # Los scripts schema.sql y populate.sql se ejecutan automáticamente al inicializar.
   db:
     image: postgres:15
     container_name: postgres_si1
@@ -8,19 +33,25 @@ services:
       POSTGRES_PASSWORD: 1234
       POSTGRES_DB: si1
     ports:
-      - "9999:5432"
+      - "9999:5432"  # Puerto externo 9999 mapeado al 5432 interno
     volumes:
+      # Los scripts se ejecutan en orden numérico al inicializar la BD
       - ./schema.sql:/docker-entrypoint-initdb.d/1_schema.sql
       - ./populate.sql:/docker-entrypoint-initdb.d/2_populate.sql
 
+  # -----------------------------------------------------------------------------
+  # Servicio de Gestión de Usuarios
+  # -----------------------------------------------------------------------------
+  # API REST para creación, autenticación y eliminación de usuarios.
+  # Requiere que la base de datos esté disponible (depends_on: db).
   user_api:
-    build: .
+    build: .  # Construye usando el Dockerfile del directorio actual
     container_name: user_si1
-    command: python3 user.py
+    command: python3 user.py  # Comando a ejecutar al iniciar el contenedor
     ports:
-      - "5050:5050"
+      - "5050:5050"  # Puerto externo 5050 mapeado al 5050 interno
     depends_on:
-      - db
+      - db  # Espera a que la base de datos esté lista
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -28,17 +59,22 @@ services:
       DB_PASSWORD: 1234
       DB_NAME: si1
     volumes:
-      - .:/app
+      - .:/app  # Monta el directorio actual en /app para desarrollo
     working_dir: /app
   
+  # -----------------------------------------------------------------------------
+  # Servicio de Catálogo de Películas
+  # -----------------------------------------------------------------------------
+  # API REST para búsqueda de películas, gestión de carrito, pedidos y calificaciones.
+  # Requiere que la base de datos esté disponible (depends_on: db).
   api_api:
-    build: .
+    build: .  # Construye usando el Dockerfile del directorio actual
     container_name: api_si1
-    command: python3 api.py
+    command: python3 api.py  # Comando a ejecutar al iniciar el contenedor
     ports:
-      - "5051:5051"
+      - "5051:5051"  # Puerto externo 5051 mapeado al 5051 interno
     depends_on:
-      - db
+      - db  # Espera a que la base de datos esté lista
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -46,5 +82,5 @@ services:
       DB_PASSWORD: 1234
       DB_NAME: si1
     volumes:
-      - .:/app
+      - .:/app  # Monta el directorio actual en /app para desarrollo
     working_dir: /app
