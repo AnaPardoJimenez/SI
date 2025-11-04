@@ -52,7 +52,7 @@ async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession
 # =============================================================================
 
 async def get_movies(params: dict = None):
-    query = "SELECT * FROM Peliculas p"
+    query = "SELECT p.* FROM Peliculas p"
     query_params = {}
     conditions = []
     joins = []
@@ -66,6 +66,7 @@ async def get_movies(params: dict = None):
         return data, "OK"
 
     if "actors" in params and params["actors"]:
+        params["actors"] = [s.strip() for s in params["actors"].split(",") if s.strip()]
         query = """
             SELECT p.*
                 FROM Peliculas p
@@ -76,7 +77,16 @@ async def get_movies(params: dict = None):
             HAVING COUNT(DISTINCT a.name) = CARDINALITY(:actor_names)
         """
         query_params = {"actor_names": params["actors"]}
+
+        if "N" in params and params["N"]:
+            try:
+                query_params["limit"] = int(params["N"])
+            except (ValueError, TypeError):
+                return {}, "ERROR"
+            query += " ORDER BY p.votes DESC, p.rating DESC LIMIT :limit"
+
         data = await fetch_all(engine, query, query_params)
+        
         if data is False:
             return None, "NOT_FOUND"
         elif data is None:
@@ -103,8 +113,16 @@ async def get_movies(params: dict = None):
         conditions.append("a.name ILIKE :actor")
         query_params["actor"] = f"%{params['actor']}%"
         query +=  "".join(joins)
+
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
+    
+    if "N" in params and params["N"]:
+        try:
+            query_params["limit"] = int(params["N"])
+        except (ValueError, TypeError):
+            return {}, "ERROR"
+        query += " ORDER BY p.votes DESC, p.rating DESC LIMIT :limit"
 
     data = await fetch_all(engine, query, query_params)
     if data is False:
@@ -118,7 +136,9 @@ async def get_movies_by_id(movieid):
     params = {"movieid": movieid}
 
     data = (await fetch_all(engine, query, params))
-    if not data:
+    if data is False:
+        return None, "NOT_FOUND"
+    elif data is None:
         return None, "ERROR"
     return data[0], "OK"
 
@@ -132,8 +152,10 @@ async def get_cart(user_id: str, movieid: int | None = None):
     """
     params = {"user_id": user_id}
     data = await fetch_all(engine, query, params)
-    if not data:
+    if data is False:
         return None, "NOT_FOUND"
+    elif data is None:
+        return None, "ERROR"
 
     query = """
         SELECT
@@ -153,12 +175,16 @@ async def get_cart(user_id: str, movieid: int | None = None):
     params = {"user_id": user_id}
 
     data = await fetch_all(engine, query, params)  # -> list[dict] | None
-    if not data:
+    if data is False:
         return None, "CART_EMPTY"
+    elif data is None:
+        return None, "ERROR"
     # Si te pasan movieid, lo quitas SOLO del resultado (no de la BBDD)
     if movieid is not None:
         data = [row for row in data if row.get("movieid") != movieid]
-    if not data:
+    if data is False:
+        return None, "NOT_FOUND"
+    elif data is None:
         return None, "ERROR"
     return data, "OK"
 
@@ -187,6 +213,8 @@ async def add_to_cart(user_id, movieid):
     ret = await fetch_all(engine, query, params)
     if ret is True:
         return "OK"
+    elif ret is False:
+        return "NOT_FOUND"
     return "ERROR"
 
 async def delete_from_cart(movieid, token):
@@ -205,8 +233,10 @@ async def delete_from_cart(movieid, token):
     """
     params = {"movieid": movieid, "user_id": user_id}
     result = await fetch_all(engine, query, params=params)
-    if result:
+    if result is True:
         return "OK"
+    elif result is False:
+        return "NOT_FOUND"
     return "ERROR"
 
 async def checkout(token):
@@ -251,7 +281,7 @@ async def get_order(order_id):
     params = {"order_id": order_id}
     order_data = await fetch_all(engine, query_order, params=params)
 
-    if not order_data:
+    if order_data is False:
         return None, "ORDER_NOT_FOUND"
         
     order_dict = {"order_id": order_data[0]["order_id"], "user_id": order_data[0]["user_id"], "total": order_data[0]["total"], "date": order_data[0]["date"]}
@@ -276,9 +306,10 @@ async def get_order(order_id):
 
     order_dict["movies"] = movies_list
 
-    if not movies_data or movies_data.empty:
+    if movies_data is False:
         return order_dict, "MOVIES_NOT_FOUND"
-
+    elif movies_data is None:
+        return None, "ERROR"
     return order_dict, "OK"
 
 async def new_balance(user_id, amount):
@@ -350,8 +381,10 @@ async def find_movie_in_cart(movieid, token):
     """
     params = {"movieid": movieid, "user_id": user_id}
     data = await fetch_all(engine, query, params=params)
-    if not data:
+    if data is False:
         return None, "MOVIE_NOT_FOUND"
+    elif data is None:
+        return None, "ERROR"
     return data[0], "OK"
 
 async def get_balance(user_id):
@@ -510,7 +543,7 @@ async def http_get_movies():
         return jsonify({
             "status": "ERROR",
             "message": "No se encontraron películas que coincidan con los criterios de búsqueda."
-        }), HTTPStatus.NOT_FOUND
+        }), HTTPStatus.ERROR
 
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
@@ -530,8 +563,14 @@ async def http_get_movie_by_id(movieid):
         data, status = await get_movies_by_id(movieid)
         if status == "OK":
             return jsonify(data), HTTPStatus.OK
-        else:
+        elif status == "NOT_FOUND":
             return jsonify({}), HTTPStatus.NOT_FOUND
+
+        return jsonify({
+            "status": "ERROR",
+            "message": "No se encontraron películas que coincidan con los criterios de búsqueda."
+        }), HTTPStatus.ERROR
+        
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
@@ -579,6 +618,8 @@ async def http_add_to_cart(movieid):
             return jsonify({'status': 'OK', 'message': 'Película añadida al carrito.'}), HTTPStatus.OK
         elif status == "CONFLICT":
             return jsonify({'status': 'ERROR', 'message': 'La película ya está en el carrito.'}), HTTPStatus.CONFLICT
+        elif status == "NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'No se ha encontrado alguna de las búsquedas'}), HTTPStatus.NOT_FOUND
         else:
             return jsonify({'status': 'ERROR', 'message': 'No se pudo añadir la película al carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
     except Exception as exc:

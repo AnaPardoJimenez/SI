@@ -2,8 +2,8 @@ from math import e
 import requests
 from http import HTTPStatus
 
-USERS = "http://0.0.0.0:5050"
-CATALOG = "http://0.0.0.0:5051"
+USERS = "http://127.0.0.1:5050"
+CATALOG = "http://127.0.0.1:5051"
 
 def ok(name, cond):
     status = "OK" if cond else "FAIL"
@@ -199,66 +199,110 @@ def main():
         ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
 
     
-    # print("# =======================================================")
-    # print("# Votar películas")
-    # print("# =======================================================")
+    print("# =======================================================")
+    print("# Votar películas")
+    print("# =======================================================")
 
-    # import random
+    import random
 
-    # # Test: Obtener catálogo completo para votar películas
-    # movieids = []
-    # r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
-    # if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
-    #     data = r.json()
-    #     if data:
-    #         for movie in data:
-    #             print(f"\t[{movie['movieid']}] {movie['title']}")
-    #             movieids.append(movie['movieid'])
+    # Test: Obtener catálogo completo para votar películas
+    movieids = []
+    r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
+    if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for movie in data:
+                print(f"\t[{movie['movieid']}] {movie['title']}")
+                movieids.append(movie['movieid'])
 
-    # # Test: Calificar películas con ratings aleatorios (0-10)
-    # for movieid in movieids[:10]:
-    #     r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": random.randint(0, 10)}, headers=headers_alice)
-    #     ok(f"Votar película con ID [{movieid}]", r.status_code == HTTPStatus.OK)
-    # # Test: Verificar que las calificaciones se actualizaron en el catálogo
-    # r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
-    # if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
-    #     data = r.json()
-    #     if data:
-    #         for movie in data:
-    #             print(f"\t[{movie['movieid']}] {movie['title']} - {movie['rating']} - {movie['votes']}")
-    #     else:
-    #         print("\tNo hay películas en el catálogo")
+    # Test: Calificar películas con ratings aleatorios (0-10)
+    for movieid in movieids[:10]:
+        r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": random.randint(0, 10)}, headers=headers_alice)
+        ok(f"Votar película con ID [{movieid}]", r.status_code == HTTPStatus.OK)
+    # Test: Verificar que las calificaciones se actualizaron en el catálogo
+    r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
+    if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for movie in data:
+                print(f"\t[{movie['movieid']}] {movie['title']} - {movie['rating']} - {movie['votes']}")
+        else:
+            print("\tNo hay películas en el catálogo")
 
-    # # Test: Actualizar calificaciones de películas a 0
-    # for movieid in movieids[:10]:
-    #     r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": 0}, headers=headers_alice)
-    #     ok(f"Votar película con ID [{movieid}] con rating 0", r.status_code == HTTPStatus.OK)
-    # # Test: Calificar películas como administrador (rating 7.69)
-    # for movieid in movieids[:10]:
-    #     r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": 7.69}, headers=headers_admin)
-    #     ok(f"Votar película con ID [{movieid}] con rating 7.69 como admin", r.status_code == HTTPStatus.OK)
-    # # Test: Verificar que las calificaciones se actualizaron después de múltiples votos
-    # r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
-    # if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
-    #     data = r.json()
-    #     if data:
-    #         for movie in data:
-    #             print(f"\t[{movie['movieid']}] {movie['title']} - {movie['rating']} - {movie['votes']}")
-    #     else:
-    #         print("\tNo hay películas en el catálogo")
+    # Test: Actualizar calificaciones de películas a 0
+    for movieid in movieids[:10]:
+        r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": 0}, headers=headers_alice)
+        ok(f"Votar película con ID [{movieid}] con rating 0", r.status_code == HTTPStatus.OK)
+    # Test: Calificar películas como administrador (rating 7.69)
+    for movieid in movieids[:10]:
+        r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": 7.69}, headers=headers_admin)
+        ok(f"Votar película con ID [{movieid}] con rating 7.69 como admin", r.status_code == HTTPStatus.OK)
+    # Test: Verificar que las calificaciones se actualizaron después de múltiples votos
+    r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
+    if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for movie in data:
+                print(f"\t[{movie['movieid']}] {movie['title']} - {movie['rating']} - {movie['votes']}")
+        else:
+            print("\tNo hay películas en el catálogo")
 
     
-    # r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": 99999999, "rating": random.randint(0, 10)}, headers=headers_alice)
-    # ok(f"Votar película con ID [99999999] no válido", r.status_code == HTTPStatus.NOT_FOUND)
+    r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": 99999999, "rating": random.randint(0, 10)}, headers=headers_alice)
+    ok(f"Votar película con ID [99999999] no válido", r.status_code == HTTPStatus.NOT_FOUND)
 
-    # # Test: Intentar calificar con rating negativo (debe fallar con BAD_REQUEST)
-    # r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieids[0], "rating": -1}, headers=headers_alice)
-    # ok(f"Votar película con ID [{movieids[0]}] con rating -1 no válido", r.status_code == HTTPStatus.BAD_REQUEST)
+    # Test: Intentar calificar con rating negativo (debe fallar con BAD_REQUEST)
+    r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieids[0], "rating": -1}, headers=headers_alice)
+    ok(f"Votar película con ID [{movieids[0]}] con rating -1 no válido", r.status_code == HTTPStatus.BAD_REQUEST)
 
-    # # Test: Intentar calificar con rating mayor a 10 (debe fallar con BAD_REQUEST)
-    # r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieids[0], "rating": 11}, headers=headers_alice)
-    # ok(f"Votar película con ID [{movieids[0]}] con rating 11 no válido", r.status_code == HTTPStatus.BAD_REQUEST)
+    # Test: Intentar calificar con rating mayor a 10 (debe fallar con BAD_REQUEST)
+    r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieids[0], "rating": 11}, headers=headers_alice)
+    ok(f"Votar película con ID [{movieids[0]}] con rating 11 no válido", r.status_code == HTTPStatus.BAD_REQUEST)
 
+    print("# =======================================================")
+    print("# Pruebas de 'actors' (conjunto) y 'N' (top N por votos)")
+    print("# =======================================================")
+
+    # NOTA: el servidor debe convertir 'actors' CSV -> lista (split(','))
+    # antes de montar la query con ANY(:actor_names::text[])
+
+    # ---------- 1) Casos correctos ----------
+    # 1.1) Conjunto de actores que SÍ co-protagonizan (Star Wars core: salen juntos en 1,2,3)
+    r = requests.get(
+        f"{CATALOG}/movies",
+        params={"actors": "Mark Hamill,Harrison Ford,Carrie Fisher", "N": 5},
+        headers=headers_alice
+    )
+    if ok("actors=Hamill,Ford,Fisher + N=5 (espera resultados)", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for m in data:
+                print(f"\t[{m['movieid']}] {m['title']} (votes={m.get('votes')}, rating={m.get('rating')})")
+        else:
+            print("\t<lista vacía>  << ¡OJO! Debería haber 1-3 pelis de Star Wars")
+
+    # 1.2) Solo N -> Top N global por votos (en tu dataset todos tienen votes=0, pero debe devolver N filas)
+    r = requests.get(f"{CATALOG}/movies", params={"N": 3}, headers=headers_alice)
+    if ok("N=3 (top global por votos)", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            print(f"\tDevolvió {len(data)} película(s):")
+            for m in data:
+                print(f"\t[{m['movieid']}] {m['title']} (votes={m.get('votes')})")
+        else:
+            print("\t<lista vacía>  << inesperado para N=3")
+# 
+    # ---------- 2) Conjunto de actores SIN coincidencias ----------
+    # (Tom Hardy solo en Venom; Keanu Reeves en Matrix: no comparten película)
+    r = requests.get(
+        f"{CATALOG}/movies",
+        params={"actors": "Tom Hardy,Keanu Reeves", "N": 5},
+        headers=headers_alice
+    )
+    ok("actors=Tom Hardy,Keanu Reeves (sin co-protag) => lista vacía",
+       r.status_code == HTTPStatus.OK and not r.json())
+
+    
     print("# =======================================================")
     print("# Limpiar base de datos")
     print("# =======================================================")
