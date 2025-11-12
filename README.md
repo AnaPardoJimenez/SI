@@ -94,7 +94,7 @@ cd /home/juan/A3Q1/SI
 sudo docker-compose down --remove-orphans -v
 
 # Paso 2: Eliminar imágenes de tus servicios
-sudo docker rmi p2_user_api p2_api_api
+sudo docker rmi p3_user_api p3_api_api
 sudo docker image prune
 
 # Paso 3: Eliminar todos los volúmenes (CUIDADO, LOS ELIMINA TODOS)

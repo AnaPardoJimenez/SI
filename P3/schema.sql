@@ -109,6 +109,7 @@ CREATE TABLE Carrito (
 CREATE TABLE Carrito_Pelicula (
     cart_id INT,
     movieid INT,
+    quantity INT DEFAULT 1,
     PRIMARY KEY (cart_id, movieid),
     FOREIGN KEY (cart_id) REFERENCES Carrito(cart_id) ON DELETE CASCADE,
     FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE

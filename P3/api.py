@@ -249,7 +249,7 @@ async def get_cart(user_id: str, movieid: int | None = None):
         return None, "ERROR"
     return data, "OK"
 
-async def add_to_cart(user_id, movieid):
+async def add_to_cart(user_id, movieid, quantity=1):
     """
     Añade una película al carrito de un usuario.
     
@@ -268,25 +268,34 @@ async def add_to_cart(user_id, movieid):
                 WHERE c.user_id = :user_id
                 AND cp.movieid = :movieid;
             """
+    print("buscando en la bbdd")
     params_check = {"user_id": user_id, "movieid": movieid}
+    print(params_check)
     existing = await fetch_all(engine, query, params_check)
+    print("resultado de la búsqueda: ", existing)
     if existing:
+        print("ya existe")
         return "CONFLICT"
     
+    print("añadiendo a la bbdd")
     query = """
-                INSERT INTO Carrito_Pelicula (cart_id, movieid)
-                SELECT cart_id, :movieid
-                FROM (SELECT cart_id FROM Carrito WHERE user_id = :user_id) AS user_cart
+                INSERT INTO Carrito_Pelicula (cart_id, movieid, quantity)
+                SELECT c.cart_id, :movieid, :quantity
+                FROM Carrito c WHERE c.user_id = :user_id
                 ON CONFLICT DO NOTHING
             """
     
-    params = {"user_id": user_id, "movieid": movieid}
-
+    params = {"user_id": user_id, "movieid": movieid, "quantity": quantity}
+    print(params)
     ret = await fetch_all(engine, query, params)
+    print(ret)
     if ret is True:
+        print("añadido correctamente")
         return "OK"
     elif ret is False:
+        print("no se encontró")
         return "NOT_FOUND"
+    print("error")
     return "ERROR"
 
 async def delete_from_cart(movieid, token):
@@ -849,15 +858,23 @@ async def http_get_cart():
 @app.route("/cart/<int:movieid>", methods=["PUT"])
 async def http_add_to_cart(movieid):
     try:
+        print("================================================")
+        print("     añadiendo a la bbdd")
+        print(movieid)
         auth = request.headers.get("Authorization", "")
+        print(auth)
         if not auth.startswith("Bearer "):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
+        print(token)
 
         if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
-    
+        print(user_id)
+        print("llamando a la función")
         status = await add_to_cart(user_id, movieid)
+        print("resultado de la función: ", status)
+
         if status == "OK":
             return jsonify({'status': 'OK', 'message': 'Película añadida al carrito.'}), HTTPStatus.OK
         elif status == "CONFLICT":
@@ -885,16 +902,22 @@ async def http_delete_from_cart(movieid):
         HTTPStatus.IM_A_TEAPOT: {"status":"ERROR", "message": "El servidor se rehusa a preparar café porque es una tetera."} - El servidor se rehusa a preparar café porque es una tetera
     """
     try:
+        print("================================================")
+        print("     eliminando de la bbdd")
+        print(movieid)
         if movieid is None:
             return jsonify({'status': 'ERROR', 'message': 'El ID de la película es requerido'}), HTTPStatus.BAD_REQUEST
-        
         auth = request.headers.get("Authorization", "")
+        print(auth)
         if not auth.startswith("Bearer "):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
+        print(token)
 
+        print("llamando a la función")
         result = await delete_from_cart(movieid, token)
+        print("resultado de la función: ", result)
         if result == "OK":
             return jsonify({'status': 'OK', 'message': 'Película eliminada del carrito.'}), HTTPStatus.OK
         elif result == "NOT_FOUND":

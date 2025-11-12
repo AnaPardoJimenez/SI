@@ -1,14 +1,26 @@
 CREATE OR REPLACE FUNCTION update_stock()
 RETURNS TRIGGER AS $$
+DECLARE
+    quantity INT;
 BEGIN
+    IF TG_OP = 'INSERT' THEN
+        quantity := -NEW.quantity;
+    ELSIF TG_OP = 'UPDATE' THEN
+        quantity := OLD.quantity - NEW.quantity;
+    END IF;
+
     UPDATE Peliculas
-    SET stock = stock - 1
+    SET stock = stock + quantity
     WHERE movieid = NEW.movieid;
+    IF NEW.quantity = 0 THEN
+        DELETE FROM Carrito_pelicula
+        WHERE cart_id = NEW.cart_id AND movieid = NEW.movieid;
+    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_stock_trigger
-AFTER INSERT OR DELETE ON carrito_pelicula
+AFTER INSERT OR UPDATE ON carrito_pelicula
 FOR EACH ROW
 EXECUTE FUNCTION update_stock();
