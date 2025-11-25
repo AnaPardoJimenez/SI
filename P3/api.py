@@ -364,10 +364,18 @@ async def checkout(token):
     # Añadir las películas al pedido
     if (await add_movies_to_order(order_id)) is not True: return None, "ADD_MOVIES_TO_ORDER_FAILED"
 
+    query = """
+        UPDATE Pedido
+        SET paid = TRUE
+        WHERE order_id = :order_id
+    """
+    params = {"order_id": order_id}
+    if (await fetch_all(engine, query, params=params)) is not True: return None, "UPDATE_PAID_FAILED"
+
     # Actualizar el saldo del usuario
-    if (await add_to_balance(user_id, -total)) is not True: return None, "ADD_TO_BALANCE_FAILED"
+    #if (await add_to_balance(user_id, -total)) is not True: return None, "ADD_TO_BALANCE_FAILED"
     # Eliminar las películas del carrito
-    if (await empty_cart(user_id)) is not True: return None, "EMPTY_CART_FAILED"
+    #if (await empty_cart(user_id)) is not True: return None, "EMPTY_CART_FAILED"
 
     query = """
         SELECT order_id
@@ -583,7 +591,7 @@ async def get_cart_total(user_id):
         float: Precio total del carrito, 0.0 si está vacío, o None en caso de error
     """
     query = """
-        SELECT SUM(p.price) as total
+        SELECT SUM(p.price * cp.quantity) as total
             FROM Carrito c
                 JOIN Carrito_Pelicula cp ON c.cart_id = cp.cart_id
                 JOIN Peliculas p ON cp.movieid = p.movieid
@@ -708,8 +716,8 @@ async def add_movies_to_order(order_id):
         bool: True si se añadieron correctamente, False en caso contrario
     """
     query = """
-        INSERT INTO Pedido_Pelicula (order_id, movieid)
-        SELECT :order_id, movieid
+        INSERT INTO Pedido_Pelicula (order_id, movieid, quantity)
+        SELECT :order_id, movieid, quantity
         FROM Carrito_Pelicula
         WHERE cart_id = :cart_id
     """

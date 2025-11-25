@@ -24,3 +24,33 @@ CREATE TRIGGER update_stock_trigger
 AFTER INSERT OR UPDATE ON carrito_pelicula
 FOR EACH ROW
 EXECUTE FUNCTION update_stock();
+
+
+
+CREATE FUNCTION update_paid()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Restar el total del pedido del balance del usuario
+    UPDATE Usuario
+    SET balance = balance - NEW.total
+    WHERE user_id = NEW.user_id;
+
+    -- Vaciar el carrito del usuario (eliminar Carrito_Pelicula y Carrito)
+    DELETE FROM Carrito_Pelicula
+    WHERE cart_id = NEW.order_id;
+
+    DELETE FROM Carrito
+    WHERE user_id = NEW.user_id;
+
+    INSERT INTO Carrito (user_id)
+    VALUES (NEW.user_id);
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_paid_trigger
+AFTER UPDATE OF paid ON pedido
+FOR EACH ROW
+WHEN (OLD.paid = FALSE AND NEW.paid = TRUE)
+EXECUTE FUNCTION update_paid();

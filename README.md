@@ -91,32 +91,32 @@ Para asegurarse de que funciona desde cero en cualquier máquina:
 ```bash
 # Paso 1: Detener y eliminar contenedores (incluye huérfanos)
 cd /home/juan/A3Q1/SI
-sudo docker-compose down --remove-orphans -v
+docker-compose down --remove-orphans -v
 
 # Paso 2: Eliminar imágenes de tus servicios
-sudo docker rmi p3_user_api p3_api_api
-sudo docker image prune
+docker rmi p3_user_api p3_api_api
+docker image prune
 
 # Paso 3: Eliminar todos los volúmenes (CUIDADO, LOS ELIMINA TODOS)
-sudo docker volume prune
+docker volume prune
 
 # Paso 3: Eliminar imagen base Python (prueba completa)
 # sudo docker rmi python:3.12
 
 # Paso 4: Limpiar archivos generados por tests
-sudo rm -f resources/users.txt
-sudo rm -f resources/files/*.txt
+rm -f resources/users.txt
+rm -f resources/files/*.txt
 
 # Paso 4.5: Comprobar que todo está limpio
-sudo docker ps -a
-sudo docker images
-sudo docker network ls
-sudo docker volume ls
+docker ps -a
+docker images
+docker network ls
+docker volume ls
 ls -la resources/
 ls -la resources/files/
 
 # Paso 5: Reconstruir y probar desde cero
-sudo docker-compose up --build
+docker-compose up --build
 ```
 
 **Nota:** El paso 3 solo hay que hacerlo una vez para probar desde cero. Tarda minutos porque descarga python:3.12 (1.11GB).
