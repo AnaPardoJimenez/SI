@@ -34,6 +34,7 @@ Requisitos:
 """
 
 from math import e
+import uuid
 import requests
 from http import HTTPStatus
 
@@ -83,6 +84,38 @@ def main():
         exit(-1)
 
     headers_admin = {"Authorization": f"Bearer {token_admin}"}
+
+    print("# =======================================================")
+    print("# Pruebas de creación/actualización/eliminación de películas")
+    print("# =======================================================")
+
+    test_title = f"Test Movie {uuid.uuid4().hex[:8]}"
+    new_movie = {
+        "title": test_title,
+        "description": "Película de prueba",
+        "year": 2024,
+        "genre": "Test",
+        "price": 5.5,
+    }
+
+    r = requests.put(f"{CATALOG}/movies", json=new_movie, headers=headers_admin)
+    ok("Crear película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
+
+    r = requests.get(f"{CATALOG}/movies", params={"title": test_title}, headers=headers_admin)
+    movieid_test = None
+    if ok("Localizar película recién creada", r.status_code == HTTPStatus.OK and r.json()):
+        movieid_test = r.json()[0]["movieid"]
+        print(f"\tID de la película de prueba: {movieid_test}")
+
+    if movieid_test:
+        r = requests.post(f"{CATALOG}/movies", json={"movieid": movieid_test, "genre": "UpdatedGenre"}, headers=headers_admin)
+        ok("Actualizar película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
+
+        r = requests.delete(f"{CATALOG}/movies", json={"movieid": movieid_test}, headers=headers_admin)
+        ok("Eliminar película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
+
+        r = requests.get(f"{CATALOG}/movies/{movieid_test}", headers=headers_admin)
+        ok("Consultar película eliminada devuelve NOT_FOUND", r.status_code == HTTPStatus.NOT_FOUND)
 
     # Se asume que el usuario 'Alice' no existe
     r = requests.put(f"{USERS}/user", json={"name": "alice", "password": "secret"}, headers=headers_admin)
@@ -208,17 +241,26 @@ def main():
                     for movie in data:
                         print(f"\t[{movie['movieid']}] {movie['title']} - {movie['price']}")
             
-    # Añadir película al carrito más de una vez
+    # Añadir película al carrito más de una vez (incrementa cantidad)
     if movieids:
-        r = requests.put(f"{CATALOG}/cart/{movieids[0]}", headers=headers_alice)
-        ok(f"Añadir película con ID [{movieids[0]}] al carrito más de una vez", r.status_code == HTTPStatus.CONFLICT)
+        extra_quantity = 2
+        total_quantity = 1 + extra_quantity  # ya se añadió 1 unidad en el bucle anterior
 
-        # Eliminar película del carrito
-        r = requests.delete(f"{CATALOG}/cart/{movieids[-1]}", headers=headers_alice)
-        if ok(f"Elimimar película con ID [{movieids[-1]}] del carrito", r.status_code == HTTPStatus.OK):
+        r = requests.put(f"{CATALOG}/cart/{movieids[0]}", json={"quantity": extra_quantity}, headers=headers_alice)
+        ok(f"Añadir {extra_quantity} unidades extra de la película con ID [{movieids[0]}] al carrito", r.status_code == HTTPStatus.OK)
+
+        # Intentar borrar más unidades de las que hay debe fallar
+        r = requests.delete(f"{CATALOG}/cart/{movieids[0]}", json={"quantity": total_quantity + 1}, headers=headers_alice)
+        ok("Intentar eliminar más unidades de las existentes en el carrito", r.status_code == HTTPStatus.CONFLICT)
+
+        # Eliminar todas las unidades añadidas de esa película
+        r = requests.delete(f"{CATALOG}/cart/{movieids[0]}", json={"quantity": total_quantity}, headers=headers_alice)
+        if ok(f"Eliminar la película con ID [{movieids[0]}] del carrito usando quantity", r.status_code == HTTPStatus.OK):
             r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
-            if ok(f"Obtener carrito del usuario sin la película [{movieids[-1]}]", r.status_code == HTTPStatus.OK):
+            if ok(f"Obtener carrito del usuario sin la película [{movieids[0]}]", r.status_code == HTTPStatus.OK):
                 data = r.json()
+                remaining_ids = [movie["movieid"] for movie in data] if data else []
+                ok("La película eliminada ya no está en el carrito", movieids[0] not in remaining_ids)
                 if data:
                     for movie in data:
                         print(f"\t[{movie['movieid']}] {movie['title']} - {movie['price']}")
@@ -413,6 +455,54 @@ def main():
 #                 print(f"\t[{m['movieid']}] {m['title']}")
 #         else:
 #             print("\t<lista vacía>  << debería estar 'Venom'")
+    
+    print("# =======================================================")
+    print("# Gestión de descuentos de usuario")
+    print("# =======================================================")
+
+    discount_value = 15
+
+    # Asignar descuento a alice como admin
+    r = requests.put(f"{USERS}/user/{uid_alice}/discount", json={"discount": discount_value}, headers=headers_admin)
+    ok(f"Asignar descuento del {discount_value}% a 'alice' como admin", r.status_code == HTTPStatus.OK)
+
+    # Consultar descuento de alice con su propio token
+    r = requests.get(f"{USERS}/user/{uid_alice}/discount", headers=headers_alice)
+    if ok("Consultar descuento de 'alice' con su token", r.status_code == HTTPStatus.OK and r.json().get("discount") == discount_value):
+        print(f"\tDescuento actual: {r.json().get('discount')}%")
+
+    # Consultar descuento de alice con token ajeno (debe fallar)
+    r = requests.get(f"{USERS}/user/{uid_alice}/discount", headers=headers_admin)
+    ok("Consultar descuento de 'alice' con token admin falla", r.status_code == HTTPStatus.UNAUTHORIZED)
+
+    # Eliminar descuento de alice como admin
+    r = requests.delete(f"{USERS}/user/{uid_alice}/discount", headers=headers_admin)
+    ok("Eliminar descuento de 'alice' como admin", r.status_code == HTTPStatus.OK)
+
+    # Confirmar descuento a 0
+    r = requests.get(f"{USERS}/user/{uid_alice}/discount", headers=headers_alice)
+    if ok("Consultar descuento de 'alice' tras eliminarlo", r.status_code == HTTPStatus.OK and r.json().get("discount") == 0):
+        print(f"\tDescuento tras eliminar: {r.json().get('discount')}%")
+
+    print("# =======================================================")
+    print("# Actualización de usuario")
+    print("# =======================================================")
+
+    nuevo_nombre = "alice_mod"
+    nueva_password = "secret2"
+
+    r = requests.put(
+        f"{USERS}/user/{uid_alice}",
+        json={"name": nuevo_nombre, "password": nueva_password},
+        headers=headers_admin
+    )
+    ok("Actualizar nombre y contraseña de 'alice' como admin", r.status_code == HTTPStatus.OK)
+
+    r = requests.get(f"{USERS}/user", json={"name": nuevo_nombre, "password": nueva_password})
+    if ok("Login con credenciales actualizadas", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        token_alice = data["token"]
+        headers_alice = {"Authorization": f"Bearer {token_alice}"}
     
     print("# =======================================================")
     print("# Limpiar base de datos")

@@ -94,6 +94,38 @@ async def comprobar_token_admin(token):
     else:
         return None
 
+async def get_uid_by_token(token):
+    """
+    Devuelve el UID asociado a un token.
+
+    Args:
+        token (str): Token de autenticación.
+
+    Returns:
+        str | None: UID si existe, None en caso contrario.
+    """
+    query = "SELECT user_id FROM Usuario WHERE token LIKE :token"
+    params = {"token": token}
+    data = await fetch_all(engine, query, params)
+    if data:
+        return data[0]["user_id"]
+    return None
+
+async def user_exists(uid):
+    """
+    Comprueba si existe un usuario con el UID proporcionado.
+
+    Args:
+        uid (str): Identificador del usuario.
+
+    Returns:
+        bool: True si existe, False en caso contrario.
+    """
+    query = "SELECT 1 FROM Usuario WHERE user_id LIKE :uid"
+    params = {"uid": uid}
+    data = await fetch_all(engine, query, params)
+    return bool(data)
+
 async def fetch_all(engine, query, params={}):
     """
     Ejecuta una consulta SQL de forma asíncrona.
@@ -232,6 +264,47 @@ async def get_user_id(username):
 # FUNCIONES DE MODIFICACIÓN DE USUARIOS
 # =============================================================================
 
+async def update_user(uid, username=None, password=None):
+    """
+    Actualiza el nombre y/o la contraseña de un usuario dado.
+
+    NOTA: La contraseña debe llegar ya hasheada (SHA-512 + salt). El hashing se
+    realiza en el endpoint HTTP antes de llamar a esta función.
+
+    Args:
+        uid (str): ID del usuario a actualizar.
+        username (str | None): Nuevo nombre de usuario (None para mantener).
+        password (str | None): Nuevo hash de contraseña (None para mantener).
+
+    Returns:
+        tuple: (success: bool, error_code: str)
+            - (True, "OK") si se actualizó al menos un campo.
+            - (False, "NOT_FOUND") si el usuario no existe o no se actualizó.
+            - (False, "NO_FIELDS") si no se envió ningún campo a actualizar.
+    """
+    if username is None and password is None:
+        return False, "NO_FIELDS"
+
+    if not await user_exists(uid):
+        return False, "NOT_FOUND"
+
+    fields = []
+    params = {"uid": uid}
+    if username is not None:
+        fields.append("name = :username")
+        params["username"] = username
+    if password is not None:
+        fields.append("password = :password")
+        params["password"] = password
+
+    query = f"UPDATE Usuario SET {', '.join(fields)} WHERE user_id LIKE :uid"
+    data = await fetch_all(engine, query, params)
+
+    if not data:
+        return False, "NOT_FOUND"
+
+    return True, "OK"
+
 async def delete_user(uid: str):
     """
     Elimina el usuario dado y su carrito asociado.
@@ -264,6 +337,93 @@ async def delete_user(uid: str):
     params = {"uid": uid}
     await fetch_all(engine, query, params)
 
+    return True, "OK"
+
+# =============================================================================
+# FUNCIONES DE DESCUENTO DE USUARIOS
+# =============================================================================
+
+async def add_discount(uid, discount):
+    """
+    Asigna un porcentaje de descuento a un usuario concreto.
+
+    Args:
+        uid (str): UID del usuario al que se aplica el descuento.
+        discount (int): Porcentaje de descuento (1-100).
+
+    Returns:
+        tuple:
+            - (True, "OK") si se actualiza correctamente.
+            - (False, "BAD_REQUEST") si el porcentaje no está en rango.
+            - (False, "USER_NOT_FOUND") si el usuario no existe.
+            - (False, "ERROR") en cualquier otro fallo.
+    """
+    if discount <= 0 or discount > 100:
+        return False, "BAD_REQUEST"
+    
+    if not await user_exists(uid):
+        return False, "USER_NOT_FOUND"
+    
+    query = "UPDATE Usuario SET discount = :discount WHERE user_id LIKE :target_uid"
+    params = {"discount": discount, "target_uid": uid}
+
+    data = await fetch_all(engine, query, params)
+
+    if not data:
+        return False, "ERROR"
+    
+    return True, "OK"
+
+async def get_discount(uid):
+    """
+    Recupera el porcentaje de descuento actual de un usuario.
+
+    Args:
+        uid (str): UID del usuario.
+
+    Returns:
+        tuple:
+            - (discount:int, "OK") con el porcentaje aplicado.
+            - (None, "USER_NOT_FOUND") si el usuario no existe.
+            - (None, "ERROR") en caso de fallo al consultar.
+    """
+    if not await user_exists(uid):
+        return None, "USER_NOT_FOUND"
+    
+    query = "SELECT discount FROM Usuario WHERE user_id LIKE :target_uid"
+    params = {"target_uid": uid}
+
+    data = await fetch_all(engine, query, params)
+
+    if not data:
+        return None, "ERROR"
+    
+    return data[0]["discount"], "OK"
+
+async def remove_discount(uid):
+    """
+    Elimina el descuento asignado a un usuario (lo deja en 0%).
+
+    Args:
+        uid (str): UID del usuario al que se le retira el descuento.
+
+    Returns:
+        tuple:
+            - (True, "OK") si se eliminó correctamente.
+            - (False, "USER_NOT_FOUND") si el usuario no existe.
+            - (False, "ERROR") en otros fallos.
+    """
+    if not await user_exists(uid):
+        return False, "USER_NOT_FOUND"
+    
+    query = "UPDATE Usuario SET discount = 0 WHERE user_id LIKE :target_uid"
+    params = {"target_uid": uid}
+
+    data = await fetch_all(engine, query, params)
+
+    if not data:
+        return False, "ERROR"
+    
     return True, "OK"
 
 # =============================================================================
@@ -385,6 +545,61 @@ async def http_login():
 # Endpoints de Modificación de Usuarios
 # -----------------------------------------------------------------------------
 
+@app.route("/user/<uid>", methods=["PUT"])
+async def http_update_user(uid):
+    """
+    Endpoint HTTP para actualizar datos de un usuario.
+    
+    - Método: PUT
+    - Path: /user/<uid>
+    - Headers: Authorization: Bearer <token_admin>
+    - Body (JSON): {"name": "<nuevo_nombre>", "password": "<nueva_password>"}
+                   Ambos campos son opcionales, pero se debe enviar al menos uno.
+    - Comportamiento: Verifica token admin, hashea password si viene y llama a update_user(uid, ...).
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status": "OK"} - Usuario actualizado.
+        HTTPStatus.BAD_REQUEST: falta Authorization, body o no se envió ningún campo.
+        HTTPStatus.UNAUTHORIZED: token no válido o no admin.
+        HTTPStatus.NOT_FOUND: usuario no existe o no se actualizó.
+        HTTPStatus.INTERNAL_SERVER_ERROR: error inesperado.
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+
+
+        token = auth.split(" ", 1)[1].strip()
+        if not await comprobar_token_admin(token):
+            return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+        
+       
+        body = (await request.get_json(silent=True))
+        if body is None:
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
+        
+        username = body.get("name")
+        password = body.get("password")
+
+        if username is None and password is None:
+            return jsonify({'status': 'ERROR', 'message': 'Debe proporcionarse al menos un campo a actualizar'}), HTTPStatus.BAD_REQUEST
+
+        if password is not None:
+            password = hashlib.sha512((password + SALT).encode('utf-8')).hexdigest()
+
+        success, error_code = await update_user(uid, username, password)
+        if not success:
+            if error_code == "NOT_FOUND":
+                return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
+            if error_code == "NO_FIELDS":
+                return jsonify({'status': 'ERROR', 'message': 'No se proporcionaron campos a actualizar'}), HTTPStatus.BAD_REQUEST
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR
+        
+        return jsonify({'status': 'OK'}), HTTPStatus.OK
+
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
 @app.route("/user/<uid>", methods=["DELETE"])
 async def http_delete_user(uid):
     """
@@ -431,6 +646,126 @@ async def http_delete_user(uid):
 
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+# -----------------------------------------------------------------------------
+# Endpoints de Descuento de Usuarios
+# -----------------------------------------------------------------------------
+
+@app.route("/user/<uid>/discount", methods=["PUT"])
+async def http_add_discount(uid):
+    """
+    Endpoint HTTP para asignar un descuento a un usuario.
+    
+    - Método: PUT
+    - Path: /user/<uid>/discount
+    - Headers: Authorization: Bearer <token_admin>
+    - Body (JSON): {"discount": <int entre 1 y 100>}
+    - Comportamiento: Verifica token admin y llama a add_discount(uid, discount).
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status": "OK"} - Descuento aplicado.
+        HTTPStatus.BAD_REQUEST: faltan headers/body o discount fuera de rango/formato.
+        HTTPStatus.UNAUTHORIZED: token no válido o no admin.
+        HTTPStatus.NOT_FOUND: usuario no existe.
+        HTTPStatus.INTERNAL_SERVER_ERROR: error inesperado.
+    """
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+
+    token = auth.split(" ", 1)[1].strip()
+    if not await comprobar_token_admin(token):
+        return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+    
+    body = (await request.get_json(silent=True))
+    if body is None:
+        return jsonify({'status': 'ERROR', 'message': 'Body JSON requerido'}), HTTPStatus.BAD_REQUEST
+    
+    discount = body.get("discount")
+    if discount is None:
+        return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "discount"'}), HTTPStatus.BAD_REQUEST
+    try:
+        discount = int(discount)
+    except ValueError:
+        return jsonify({'status': 'ERROR', 'message': 'El valor de "discount" debe ser un entero'}), HTTPStatus.BAD_REQUEST
+    
+    success, error_code = await add_discount(uid, discount)
+    if not success:
+        if error_code == "BAD_REQUEST":
+            return jsonify({'status': 'ERROR', 'message': 'El porcentaje de descuento debe estar entre 1 y 100'}), HTTPStatus.BAD_REQUEST
+        elif error_code == "USER_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+    return jsonify({'status': 'OK'}), HTTPStatus.OK
+        
+@app.route("/user/<uid>/discount", methods=["DELETE"])
+async def http_remove_discount(uid):
+    """
+    Endpoint HTTP para eliminar el descuento de un usuario (ponerlo a 0).
+    
+    - Método: DELETE
+    - Path: /user/<uid>/discount
+    - Headers: Authorization: Bearer <token_admin>
+    - Comportamiento: Verifica token admin y llama a remove_discount(uid).
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status": "OK"} - Descuento eliminado.
+        HTTPStatus.BAD_REQUEST: falta Authorization Bearer.
+        HTTPStatus.UNAUTHORIZED: token no válido o no admin.
+        HTTPStatus.NOT_FOUND: usuario no existe.
+        HTTPStatus.INTERNAL_SERVER_ERROR: error inesperado.
+    """
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+
+
+    token = auth.split(" ", 1)[1].strip()
+    if not await comprobar_token_admin(token):
+        return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+    
+    success, error_code = await remove_discount(uid)
+    if not success:
+        if error_code == "USER_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+    return jsonify({'status': 'OK'}), HTTPStatus.OK
+
+@app.route("/user/<uid>/discount", methods=["GET"])
+async def http_get_discount(uid):
+    """
+    Endpoint HTTP para consultar el descuento actual de un usuario.
+    
+    - Método: GET
+    - Path: /user/<uid>/discount
+    - Headers: Authorization: Bearer <token_usuario>
+    - Comportamiento: Verifica que el token pertenezca al mismo usuario (uid) y llama a get_discount(uid).
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status": "OK", "discount": <int>} - Descuento devuelto.
+        HTTPStatus.BAD_REQUEST: falta Authorization Bearer.
+        HTTPStatus.UNAUTHORIZED: token no coincide con el usuario.
+        HTTPStatus.NOT_FOUND: usuario no existe.
+        HTTPStatus.INTERNAL_SERVER_ERROR: error inesperado.
+    """
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+
+    token = auth.split(" ", 1)[1].strip()
+    if (token_uid := await get_uid_by_token(token)) != uid:
+        return jsonify({'status': 'ERROR', 'message': 'Token no válido para este usuario'}), HTTPStatus.UNAUTHORIZED
+
+    discount, error_code = await get_discount(uid)
+    if discount is None:
+        if error_code == "USER_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'Error inesperado del servidor'}), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+    return jsonify({'status': 'OK', 'discount': discount}), HTTPStatus.OK
+
 
 # =============================================================================
 # PUNTO DE ENTRADA PRINCIPAL

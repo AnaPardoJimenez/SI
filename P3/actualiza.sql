@@ -12,10 +12,6 @@ BEGIN
     UPDATE Peliculas
     SET stock = stock + quantity
     WHERE movieid = NEW.movieid;
-    IF NEW.quantity = 0 THEN
-        DELETE FROM Carrito_pelicula
-        WHERE cart_id = NEW.cart_id AND movieid = NEW.movieid;
-    END IF;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

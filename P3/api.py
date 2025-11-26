@@ -52,6 +52,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from http import HTTPStatus
+import user
 
 # =============================================================================
 # CONFIGURACIÓN Y CONSTANTES
@@ -66,6 +67,101 @@ async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession
 # =============================================================================
 # FUNCIONES DE GESTIÓN DE CATÁLOGO
 # =============================================================================
+
+async def add_movie(movie_data: dict):
+    """
+    Añade una película al catálogo con los campos mínimos requeridos.
+
+    Args:
+        movie_data (dict): Diccionario con las claves title, description, year,
+            genre y price.
+
+    Returns:
+        tuple: (success, status)
+            - success (bool): True si la inserción se realizó sin errores.
+            - status (str): "OK" en caso de éxito, "BAD_REQUEST" si faltan campos
+              obligatorios o "ERROR" si la operación falla.
+    """
+
+    required_fields = ("title", "description", "year", "genre", "price")
+    if not all(movie_data.get(field) for field in required_fields):
+        return False, "BAD_REQUEST"  # Todos los campos son obligatorios
+
+    query = """
+        INSERT INTO Peliculas (title, description, year, genre, price)
+        VALUES (:title, :description, :year, :genre, :price)
+    """
+
+    params = {
+        "title": movie_data.get("title"),
+        "description": movie_data.get("description"),
+        "year": movie_data.get("year"),
+        "genre": movie_data.get("genre"),
+        "price": movie_data.get("price"),
+    }
+    result = await fetch_all(engine, query, params=params)
+    
+    if result is True:
+        return True, "OK"
+    return False, "ERROR"
+
+async def update_movie(movieid: int, movie_data: dict):
+    """
+    Actualiza cualquier campo editable de una película salvo su identificador.
+
+    Args:
+        movieid (int): ID de la película a modificar.
+        movie_data (dict): Pares campo-valor a actualizar. Se ignoran claves no permitidas.
+
+    Returns:
+        tuple: (success, status)
+            - success (bool): True si se actualizó alguna fila.
+            - status (str): "OK" en éxito, "BAD_REQUEST" si no hay datos válidos,
+              "NOT_FOUND" si no existe la película, "ERROR" en caso de fallo.
+    """
+    if not movie_data:
+        return False, "BAD_REQUEST"  # No se proporcionaron datos para actualizar
+
+    allowed_fields = {"title", "description", "year", "genre", "price", "rating", "stock", "votes"}
+    fields_to_update = {k: v for k, v in movie_data.items() if k in allowed_fields}
+    if not fields_to_update:
+        return False, "BAD_REQUEST"
+
+    set_clauses = ", ".join(f"{field} = :{field}" for field in fields_to_update)
+    query = f"UPDATE Peliculas SET {set_clauses} WHERE movieid = :movieid"
+    params = {"movieid": movieid, **fields_to_update}
+
+    result = await fetch_all(engine, query, params=params)
+    if result is True:
+        return True, "OK"
+    elif result is False:
+        return False, "NOT_FOUND"
+    return False, "ERROR"
+
+async def remove_movie(movieid: int):
+    """
+    Elimina una película del catálogo según su identificador.
+
+    Args:
+        movieid (int): ID de la película a eliminar.
+
+    Returns:
+        tuple: (success, status)
+            - success (bool): True si la eliminación se ejecutó sin errores.
+            - status (str): "OK" en caso de éxito, "ERROR" si falla la operación.
+    """
+    query = """
+        DELETE FROM Peliculas
+        WHERE movieid = :movieid
+    """
+
+    params = {"movieid": movieid}
+    result = await fetch_all(engine, query, params=params)
+    if result is True:
+        return True, "OK"
+    elif result is False:
+        return False, "NOT_FOUND"
+    return False, "ERROR"
 
 async def get_movies(params: dict = None):
     """
@@ -251,15 +347,15 @@ async def get_cart(user_id: str, movieid: int | None = None):
 
 async def add_to_cart(user_id, movieid, quantity=1):
     """
-    Añade una película al carrito de un usuario.
+    Añade una película al carrito de un usuario (o incrementa su cantidad).
     
     Args:
         user_id (str): ID del usuario.
         movieid (int): ID de la película a añadir.
     
     Returns:
-        str: "OK" si se añadió correctamente, "CONFLICT" si la película ya está
-             en el carrito, "NOT_FOUND" si no se encontró el carrito, o "ERROR"
+        str: "OK" si se añadió correctamente o se incrementó la cantidad,
+             "NOT_FOUND" si no se encontró el carrito, o "ERROR"
     """
     query = """
                 SELECT 1
@@ -268,16 +364,25 @@ async def add_to_cart(user_id, movieid, quantity=1):
                 WHERE c.user_id = :user_id
                 AND cp.movieid = :movieid;
             """
-    print("buscando en la bbdd")
     params_check = {"user_id": user_id, "movieid": movieid}
-    print(params_check)
     existing = await fetch_all(engine, query, params_check)
-    print("resultado de la búsqueda: ", existing)
     if existing:
-        print("ya existe")
-        return "CONFLICT"
-    
-    print("añadiendo a la bbdd")
+        query = """
+            UPDATE Carrito_Pelicula cp
+                SET quantity = quantity + :quantity
+            FROM Carrito c
+            WHERE cp.cart_id = c.cart_id
+                AND c.user_id = :user_id
+                AND cp.movieid = :movieid
+        """
+        params_update = {"user_id": user_id, "movieid": movieid, "quantity": quantity}
+        update_result = await fetch_all(engine, query, params_update)
+        if update_result is True:
+            return "OK"
+        elif update_result is False:
+            return "NOT_FOUND"
+        return "ERROR"
+        
     query = """
                 INSERT INTO Carrito_Pelicula (cart_id, movieid, quantity)
                 SELECT c.cart_id, :movieid, :quantity
@@ -286,50 +391,71 @@ async def add_to_cart(user_id, movieid, quantity=1):
             """
     
     params = {"user_id": user_id, "movieid": movieid, "quantity": quantity}
-    print(params)
     ret = await fetch_all(engine, query, params)
-    print(ret)
     if ret is True:
-        print("añadido correctamente")
         return "OK"
     elif ret is False:
-        print("no se encontró")
         return "NOT_FOUND"
-    print("error")
     return "ERROR"
 
-async def delete_from_cart(movieid, token):
+async def delete_from_cart(movieid, token, quantity=1):
     """
     Elimina una película del carrito de un usuario.
     
     Args:
         movieid (int): ID de la película a eliminar.
         token (str): Token de autenticación del usuario.
+        quantity (int): Cantidad a eliminar.
     
     Returns:
         str: "OK" si se eliminó correctamente, "NOT_FOUND" si no se encontró,
+             "TOO_MANY_MOVIES" si se intenta eliminar más de las existentes,
              o "ERROR" en caso de error
     """
     result = await find_movie_in_cart(movieid, token)
     if result[1] != "OK":
         return result[1]
-
-    user_id = result[0].get("user_id")
-    query = """
-        DELETE 
-            FROM Carrito_Pelicula cp 
-                USING Carrito c
-            WHERE cp.cart_id = c.cart_id 
+    
+    # Cantidad a eliminar es igual a la cantidad en el carrito: eliminar entrada
+    if quantity - result[0].get("quantity", 1) == 0:
+        user_id = result[0].get("user_id")
+        query = """
+            DELETE 
+                FROM Carrito_Pelicula cp 
+                    USING Carrito c
+                WHERE cp.cart_id = c.cart_id 
+                    AND c.user_id = :user_id
+                    AND cp.movieid = :movieid 
+        """
+        params = {"movieid": movieid, "user_id": user_id}
+        result = await fetch_all(engine, query, params=params)
+        if result is True:
+            return "OK"
+        elif result is False:
+            return "NOT_FOUND"
+        return "ERROR"
+    
+    # Cantidad a eliminar es menor a la cantidad en el carrito: decrementar cantidad
+    elif quantity < result[0].get("quantity", 1):
+        query = """
+            UPDATE Carrito_Pelicula cp
+                SET quantity = quantity - :quantity
+            FROM Carrito c
+            WHERE cp.cart_id = c.cart_id
                 AND c.user_id = :user_id
                 AND cp.movieid = :movieid 
-    """
-    params = {"movieid": movieid, "user_id": user_id}
-    result = await fetch_all(engine, query, params=params)
-    if result is True:
-        return "OK"
-    elif result is False:
-        return "NOT_FOUND"
-    return "ERROR"
+        """
+        params = {"movieid": movieid, "user_id": result[0].get("user_id"), "quantity": quantity}
+        update_result = await fetch_all(engine, query, params=params)
+        if update_result is True:
+            return "OK"
+        elif update_result is False:
+            return "NOT_FOUND"
+        return "ERROR"
+    
+    # Cantidad a eliminar es mayor a la cantidad en el carrito: error
+    else:
+        return "TOO_MANY_MOVIES"
 
 async def checkout(token):
     """
@@ -773,9 +899,21 @@ async def fetch_all(engine, query, params={}):
 
 app = Quart(__name__)
 
-
-@app.route("/movies", methods=["GET"])
-async def http_get_movies():
+@app.route("/movies", methods=["PUT"])
+async def http_add_movie():
+    """
+    Endpoint HTTP para crear una película (solo admin).
+    
+    - Método: PUT
+    - Path: /movies
+    - Body (query/body): title, description, year, genre, price
+    - Comportamiento: Llama a add_movie(body)
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status":"OK"} - Película creada correctamente
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Datos requeridos faltantes
+        HTTPStatus.UNAUTHORIZED: {"status":"ERROR", "message": "..."} - Usuario no admin o no encontrado
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
     try:
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
@@ -783,7 +921,140 @@ async def http_get_movies():
         
         token = auth.split(" ", 1)[1].strip()
 
-        if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
+        # Verificar si el usuario es admin
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+        if not await user.comprobar_token_admin(token):
+            return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
+
+        body = await request.get_json(silent=True) or {}
+
+        data, status = await add_movie(body)
+        if status == "OK":
+            return jsonify({'status': 'OK'}), HTTPStatus.OK
+        elif status == "BAD_REQUEST":
+            return jsonify({'status': 'ERROR', 'message': 'Solicitud incorrecta. Faltan campos obligatorios.'}), HTTPStatus.BAD_REQUEST
+        return jsonify({'status': 'ERROR', 'message': 'No se pudo crear la película.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+    except Exception as exc:
+        return jsonify({"status": "ERROR", "message": str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@app.route("/movies", methods=["POST"])
+async def http_update_movies():
+    """
+    Endpoint HTTP para actualizar una película (solo admin).
+    
+    - Método: POST
+    - Path: /movies
+    - Body (query/body): movieid (obligatorio) y campos a actualizar
+    - Comportamiento: Llama a update_movie(movieid, body)
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status":"OK"} - Película actualizada
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - movieid faltante o sin campos válidos
+        HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "..."} - Película no encontrada
+        HTTPStatus.UNAUTHORIZED: {"status":"ERROR", "message": "..."} - Usuario no admin o no encontrado
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+
+        # Verificar si el usuario es admin
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+        if not await user.comprobar_token_admin(token):
+            return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
+
+        body = await request.get_json(silent=True) or {}
+
+        if not body.get("movieid"):
+            return jsonify({'status': 'ERROR', 'message': 'movieid es obligatorio.'}), HTTPStatus.BAD_REQUEST
+
+        data, status = await update_movie(body.get("movieid"), body)
+
+        if status == "OK":
+            return jsonify({'status': 'OK'}), HTTPStatus.OK
+        elif status == "NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'Película no encontrada.'}), HTTPStatus.NOT_FOUND
+        elif status == "BAD_REQUEST":
+            return jsonify({'status': 'ERROR', 'message': 'Solicitud incorrecta. No se proporcionaron campos para actualizar.'}), HTTPStatus.BAD_REQUEST
+        return jsonify({'status': 'ERROR', 'message': 'No se pudo actualizar la película.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+    except Exception as exc:
+        return jsonify({"status": "ERROR", "message": str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@app.route("/movies", methods=["DELETE"])
+async def http_delete_movies():
+    """
+    Endpoint HTTP para eliminar una película (solo admin).
+    
+    - Método: DELETE
+    - Path: /movies
+    - Body (query/body): movieid (obligatorio)
+    - Comportamiento: Llama a remove_movie(movieid)
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status":"OK"} - Película eliminada
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - movieid faltante
+        HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "..."} - Película no encontrada
+        HTTPStatus.UNAUTHORIZED: {"status":"ERROR", "message": "..."} - Usuario no admin o no encontrado
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+
+        # Verificar si el usuario es admin
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+        if not await user.comprobar_token_admin(token):
+            return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
+
+        body = await request.get_json(silent=True) or {}
+
+        if not body.get("movieid"):
+            return jsonify({'status': 'ERROR', 'message': 'movieid es obligatorio.'}), HTTPStatus.BAD_REQUEST
+
+        data, status = await remove_movie(body.get("movieid"))
+
+        if status == "OK":
+            return jsonify({'status': 'OK'}), HTTPStatus.OK
+        elif status == "NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'Película no encontrada.'}), HTTPStatus.NOT_FOUND
+        return jsonify({'status': 'ERROR', 'message': 'No se pudo eliminar la película.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+    except Exception as exc:
+        return jsonify({"status": "ERROR", "message": str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@app.route("/movies", methods=["GET"])
+async def http_get_movies():
+    """
+    Endpoint HTTP para listar/filtrar películas.
+    
+    - Método: GET
+    - Path: /movies
+    - Query params: title, year, genre, actor, actors, N
+    - Comportamiento: Llama a get_movies(params)
+    - Respuestas esperadas:
+        HTTPStatus.OK: <lista de películas> - Resultados devueltos (vacío si no hay)
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Falta Authorization
+        HTTPStatus.IM_A_TEAPOT: {} - Límite N inválido (<=0)
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
 
         body = request.args.to_dict(flat=True)
 
@@ -795,10 +1066,7 @@ async def http_get_movies():
         elif status == "LIMIT_ERROR_VALUE":
             return jsonify({}), HTTPStatus.IM_A_TEAPOT
 
-        return jsonify({
-            "status": "ERROR",
-            "message": "No se encontraron películas que coincidan con los criterios de búsqueda."
-        }), HTTPStatus.ERROR
+        return jsonify({'status': 'ERROR', 'message': 'No se encontraron películas que coincidan con los criterios de búsqueda.'}), HTTPStatus.INTERNAL_SERVER_ERROR
 
     except Exception as exc:
         return jsonify({"status": "ERROR", "message": str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
@@ -806,6 +1074,18 @@ async def http_get_movies():
     
 @app.route("/movies/<int:movieid>", methods=["GET"])
 async def http_get_movie_by_id(movieid):
+    """
+    Endpoint HTTP para obtener detalles de una película.
+    
+    - Método: GET
+    - Path: /movies/<movieid>
+    - Comportamiento: Llama a get_movies_by_id(movieid)
+    - Respuestas esperadas:
+        HTTPStatus.OK: <película> - Película encontrada
+        HTTPStatus.NOT_FOUND: {} - Película no encontrada
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Falta Authorization
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
     try:
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
@@ -813,7 +1093,8 @@ async def http_get_movie_by_id(movieid):
         
         token = auth.split(" ", 1)[1].strip()
 
-        if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
 
         data, status = await get_movies_by_id(movieid)
         if status == "OK":
@@ -821,10 +1102,7 @@ async def http_get_movie_by_id(movieid):
         elif status == "NOT_FOUND":
             return jsonify({}), HTTPStatus.NOT_FOUND
 
-        return jsonify({
-            "status": "ERROR",
-            "message": "No se encontraron películas que coincidan con los criterios de búsqueda."
-        }), HTTPStatus.ERROR
+        return jsonify({'status': 'ERROR', 'message': 'No se encontraron películas que coincidan con los criterios de búsqueda.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
@@ -832,6 +1110,18 @@ async def http_get_movie_by_id(movieid):
 
 @app.route("/cart", methods=["GET"])
 async def http_get_cart():
+    """
+    Endpoint HTTP para obtener el carrito del usuario autenticado.
+    
+    - Método: GET
+    - Path: /cart
+    - Comportamiento: Llama a get_cart(user_id)
+    - Respuestas esperadas:
+        HTTPStatus.OK: <carrito> - Carrito encontrado (vacío si no hay items)
+        HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "..."} - Carrito no encontrado
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Falta Authorization
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
     try:
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
@@ -854,38 +1144,58 @@ async def http_get_cart():
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
-
 @app.route("/cart/<int:movieid>", methods=["PUT"])
 async def http_add_to_cart(movieid):
+    """
+    Endpoint HTTP para añadir/incrementar una película en el carrito.
+    
+    - Método: PUT
+    - Path: /cart/<movieid>
+    - Body/Query: quantity (opcional, por defecto 1)
+    - Comportamiento: Llama a add_to_cart(user_id, movieid, quantity)
+    - Respuestas esperadas:
+        HTTPStatus.OK: {"status":"OK", "message": "..."} - Película añadida
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Falta Authorization o quantity inválida
+        HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "..."} - Película o recursos no encontrados
+        HTTPStatus.UNAUTHORIZED: {"status":"ERROR", "message": "..."} - Usuario no encontrado
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
     try:
-        print("================================================")
-        print("     añadiendo a la bbdd")
-        print(movieid)
         auth = request.headers.get("Authorization", "")
-        print(auth)
         if not auth.startswith("Bearer "):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
-        token = auth.split(" ", 1)[1].strip()
-        print(token)
+        quantity = request.args.get("quantity")
+        if quantity is None:
+            body = await request.get_json(silent=True)
+            quantity = body.get("quantity") if body else None
+        try:
+            quantity = int(quantity) if quantity is not None else 1
+        except (TypeError, ValueError):
+            return jsonify({'status': 'ERROR', 'message': 'La cantidad debe ser un número entero.'}), HTTPStatus.BAD_REQUEST
+        if quantity <= 0:
+            return jsonify({'status': 'ERROR', 'message': 'La cantidad debe ser mayor que cero.'}), HTTPStatus.BAD_REQUEST
 
-        if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
-        print(user_id)
-        print("llamando a la función")
-        status = await add_to_cart(user_id, movieid)
-        print("resultado de la función: ", status)
+        token = auth.split(" ", 1)[1].strip()
+
+        user_id = await get_user_id(token)
+        if not user_id:
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+
+        status = await add_to_cart(user_id, movieid, quantity)
 
         if status == "OK":
             return jsonify({'status': 'OK', 'message': 'Película añadida al carrito.'}), HTTPStatus.OK
-        elif status == "CONFLICT":
-            return jsonify({'status': 'ERROR', 'message': 'La película ya está en el carrito.'}), HTTPStatus.CONFLICT
+        elif status == "USER_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+        elif status == "MOVIE_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'No se encontró la película.'}), HTTPStatus.NOT_FOUND
         elif status == "NOT_FOUND":
             return jsonify({'status': 'ERROR', 'message': 'No se ha encontrado alguna de las búsquedas'}), HTTPStatus.NOT_FOUND
         else:
             return jsonify({'status': 'ERROR', 'message': 'No se pudo añadir la película al carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
-
 
 @app.route("/cart/<int:movieid>", methods=["DELETE"])
 async def http_delete_from_cart(movieid):
@@ -902,28 +1212,38 @@ async def http_delete_from_cart(movieid):
         HTTPStatus.IM_A_TEAPOT: {"status":"ERROR", "message": "El servidor se rehusa a preparar café porque es una tetera."} - El servidor se rehusa a preparar café porque es una tetera
     """
     try:
-        print("================================================")
-        print("     eliminando de la bbdd")
-        print(movieid)
         if movieid is None:
             return jsonify({'status': 'ERROR', 'message': 'El ID de la película es requerido'}), HTTPStatus.BAD_REQUEST
         auth = request.headers.get("Authorization", "")
-        print(auth)
         if not auth.startswith("Bearer "):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
-        print(token)
 
-        print("llamando a la función")
-        result = await delete_from_cart(movieid, token)
-        print("resultado de la función: ", result)
+        quantity = request.args.get("quantity")
+        if quantity is None:
+            body = await request.get_json(silent=True)
+            quantity = body.get("quantity") if body else None
+        try:
+            quantity = int(quantity) if quantity is not None else 1
+        except (TypeError, ValueError):
+            return jsonify({'status': 'ERROR', 'message': 'La cantidad debe ser un número entero.'}), HTTPStatus.BAD_REQUEST
+        if quantity <= 0:
+            return jsonify({'status': 'ERROR', 'message': 'La cantidad debe ser mayor que cero.'}), HTTPStatus.BAD_REQUEST
+
+        result = await delete_from_cart(movieid, token, quantity)
         if result == "OK":
             return jsonify({'status': 'OK', 'message': 'Película eliminada del carrito.'}), HTTPStatus.OK
+        elif result == "USER_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+        elif result == "MOVIE_NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'No se encontró la película en el carrito.'}), HTTPStatus.NOT_FOUND
         elif result == "NOT_FOUND":
             return jsonify({'status': 'OK', 'message': 'No se encontró la película en el carrito.'}), HTTPStatus.NOT_FOUND
         elif result == "ERROR":
             return jsonify({'status': 'ERROR', 'message': 'No se pudo eliminar la película del carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+        elif result == "TOO_MANY_MOVIES":
+            return jsonify({'status': 'ERROR', 'message': 'Se intentó eliminar más películas de las que existen en el carrito.'}), HTTPStatus.CONFLICT
         else:
             return jsonify({'status': 'ERROR', 'message': 'El servidor se rehusa a preparar café porque es una tetera.'}), HTTPStatus.IM_A_TEAPOT
 
