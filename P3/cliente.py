@@ -254,6 +254,8 @@ def main():
         # Test: Verificar que el carrito está vacío después del checkout
         r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
         ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
+    else:
+        print(f"Error: {r.json()}")
 
     
     print("# =======================================================")
@@ -273,9 +275,11 @@ def main():
                 movieids.append(movie['movieid'])
 
     # Test: Calificar películas con ratings aleatorios (0-10)
+    ratings = []
     for movieid in movieids[:10]:
-        r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": random.randint(0, 10)}, headers=headers_alice)
-        ok(f"Votar película con ID [{movieid}]", r.status_code == HTTPStatus.OK)
+        ratings.append(random.randint(0, 10))
+        r = requests.post(f"{CATALOG}/movies/calification", json={"movieid": movieid, "rating": ratings[-1]}, headers=headers_alice)
+        ok(f"Votar película con ID [{movieid}] con rating {ratings[-1]}", r.status_code == HTTPStatus.OK)
     # Test: Verificar que las calificaciones se actualizaron en el catálogo
     r = requests.get(f"{CATALOG}/movies", headers=headers_alice)
     if ok("Obtener catálogo de películas completo", r.status_code == HTTPStatus.OK):

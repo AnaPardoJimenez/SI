@@ -61,7 +61,7 @@ CREATE TABLE Peliculas (
     price DECIMAL(10,2),
     rating DECIMAL(10,2),
     stock INT DEFAULT 0,
-    votes INT
+    votes INT DEFAULT 0
 );
 
 -- =============================================================================

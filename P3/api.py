@@ -268,16 +268,11 @@ async def add_to_cart(user_id, movieid, quantity=1):
                 WHERE c.user_id = :user_id
                 AND cp.movieid = :movieid;
             """
-    print("buscando en la bbdd")
     params_check = {"user_id": user_id, "movieid": movieid}
-    print(params_check)
     existing = await fetch_all(engine, query, params_check)
-    print("resultado de la búsqueda: ", existing)
     if existing:
-        print("ya existe")
         return "CONFLICT"
     
-    print("añadiendo a la bbdd")
     query = """
                 INSERT INTO Carrito_Pelicula (cart_id, movieid, quantity)
                 SELECT c.cart_id, :movieid, :quantity
@@ -286,16 +281,11 @@ async def add_to_cart(user_id, movieid, quantity=1):
             """
     
     params = {"user_id": user_id, "movieid": movieid, "quantity": quantity}
-    print(params)
     ret = await fetch_all(engine, query, params)
-    print(ret)
     if ret is True:
-        print("añadido correctamente")
         return "OK"
     elif ret is False:
-        print("no se encontró")
         return "NOT_FOUND"
-    print("error")
     return "ERROR"
 
 async def delete_from_cart(movieid, token):
@@ -358,20 +348,17 @@ async def checkout(token):
     if (current_balance := await get_balance(user_id)) is None: return None, "BALANCE_NOT_FOUND"
     # Verificar si el saldo es suficiente para pagar el carrito
     if (current_balance - total) < 0: return None, "INSUFFICIENT_BALANCE"
-
     # Crear el pedido
-    if (order_id := await create_order(user_id, total)) is not True: return None, "CREATE_ORDER_FAILED"
+    if (order_id := await create_order(user_id, total)) is None: return None, "CREATE_ORDER_FAILED"
     # Añadir las películas al pedido
     if (await add_movies_to_order(order_id)) is not True: return None, "ADD_MOVIES_TO_ORDER_FAILED"
-
     query = """
         UPDATE Pedido
         SET paid = TRUE
         WHERE order_id = :order_id
     """
     params = {"order_id": order_id}
-    if (await fetch_all(engine, query, params=params)) is not True: return None, "UPDATE_PAID_FAILED"
-
+    if (await fetch_all(engine, query, params=params)) is None: return None, "UPDATE_PAID_FAILED"
     # Actualizar el saldo del usuario
     #if (await add_to_balance(user_id, -total)) is not True: return None, "ADD_TO_BALANCE_FAILED"
     # Eliminar las películas del carrito
@@ -479,28 +466,36 @@ async def rate_movie(user_id, movieid, rating):
     if result[1] != "OK": return "MOVIE_NOT_FOUND"
 
     query = """
+        SELECT rating
+        FROM Calificacion
+        WHERE movieid = :movieid AND user_id = :user_id
+    """
+    params = {"movieid": movieid, "user_id": user_id}
+    result = await fetch_all(engine, query, params=params)
+    if result is False or result is None:
+        query = """
+            UPDATE Peliculas
+            SET votes = votes + 1
+            WHERE movieid = :movieid
+        """
+        params = {"movieid": movieid}
+        await fetch_all(engine, query, params=params)
+    
+    query = """
         INSERT INTO Calificacion (user_id, movieid, rating)
         VALUES (:user_id, :movieid, :rating)
         ON CONFLICT(user_id, movieid) DO UPDATE SET rating = :rating
     """
     params = {"user_id": user_id, "movieid": movieid, "rating": rating}
-    try:
-        result = await fetch_all(engine, query, params=params)
-        # No hay garantía de filas devueltas en UPDATE/INSERT
-    except Exception as exc:
-        return "CALIFICATION_FAILED"
+    await fetch_all(engine, query, params=params)
 
     query_update = """
         UPDATE Peliculas
-        SET rating = (SELECT AVG(rating) FROM Calificacion WHERE movieid = :movieid),
-            votes = (SELECT COUNT(*) FROM Calificacion WHERE movieid = :movieid)
+        SET rating = media_rating(:movieid)
         WHERE movieid = :movieid
     """
     params_update = {"movieid": movieid}
-    try:
-        result_upd = await fetch_all(engine, query_update, params=params_update)
-    except Exception as exc:
-        return "UPDATE_MOVIE_FAILED"
+    await fetch_all(engine, query_update, params=params_update)
 
     return "OK"
 
@@ -703,7 +698,9 @@ async def create_order(user_id, total):
         RETURNING order_id
     """
     params = {"order_id": cart_id, "user_id": user_id, "total": total}
-    return await fetch_all(engine, query, params=params)
+    if await fetch_all(engine, query, params=params) is not True:
+        return None
+    return cart_id
 
 async def add_movies_to_order(order_id):
     """
@@ -866,22 +863,14 @@ async def http_get_cart():
 @app.route("/cart/<int:movieid>", methods=["PUT"])
 async def http_add_to_cart(movieid):
     try:
-        print("================================================")
-        print("     añadiendo a la bbdd")
-        print(movieid)
         auth = request.headers.get("Authorization", "")
-        print(auth)
         if not auth.startswith("Bearer "):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
-        print(token)
 
         if not (user_id := await get_user_id(token)): return None, "USER_NOT_FOUND"
-        print(user_id)
-        print("llamando a la función")
         status = await add_to_cart(user_id, movieid)
-        print("resultado de la función: ", status)
 
         if status == "OK":
             return jsonify({'status': 'OK', 'message': 'Película añadida al carrito.'}), HTTPStatus.OK
@@ -910,22 +899,15 @@ async def http_delete_from_cart(movieid):
         HTTPStatus.IM_A_TEAPOT: {"status":"ERROR", "message": "El servidor se rehusa a preparar café porque es una tetera."} - El servidor se rehusa a preparar café porque es una tetera
     """
     try:
-        print("================================================")
-        print("     eliminando de la bbdd")
-        print(movieid)
         if movieid is None:
             return jsonify({'status': 'ERROR', 'message': 'El ID de la película es requerido'}), HTTPStatus.BAD_REQUEST
         auth = request.headers.get("Authorization", "")
-        print(auth)
         if not auth.startswith("Bearer "):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
-        print(token)
 
-        print("llamando a la función")
         result = await delete_from_cart(movieid, token)
-        print("resultado de la función: ", result)
         if result == "OK":
             return jsonify({'status': 'OK', 'message': 'Película eliminada del carrito.'}), HTTPStatus.OK
         elif result == "NOT_FOUND":
@@ -984,6 +966,8 @@ async def http_checkout():
             return jsonify({'status': 'ERROR', 'message': 'No se pudo crear el pedido.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         elif result == "ADD_MOVIES_TO_ORDER_FAILED":
             return jsonify({'status': 'ERROR', 'message': 'No se pudo añadir las películas al pedido.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+        elif result == "UPDATE_PAID_FAILED":
+            return jsonify({'status': 'ERROR', 'message': 'No se pudo actualizar el pago del pedido.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         else:
             return jsonify({'status': 'ERROR', 'message': 'El servidor se rehusa a preparar café porque es una tetera.'}), HTTPStatus.IM_A_TEAPOT
     except Exception as exc:

@@ -116,7 +116,7 @@ ls -la resources/
 ls -la resources/files/
 
 # Paso 5: Reconstruir y probar desde cero
-docker-compose up --build
+sudo docker-compose up --build
 ```
 
 **Nota:** El paso 3 solo hay que hacerlo una vez para probar desde cero. Tarda minutos porque descarga python:3.12 (1.11GB).
