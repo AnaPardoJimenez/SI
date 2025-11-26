@@ -623,6 +623,53 @@ async def rate_movie(user_id, movieid, rating):
     return "OK"
 
 # =============================================================================
+# FUNCIONES ESTADÍSTICAS
+# =============================================================================
+
+async def estadistica_ventas(anio, pais):
+    """
+    Devuelve pedidos de un año y país concretos, con datos básicos del usuario.
+
+    Args:
+        anio (int): Año de los pedidos a recuperar.
+        pais (str): Nacionalidad del usuario.
+
+    Returns:
+        tuple: (data, status)
+            - data: lista de filas o None
+            - status: "OK", "NOT_FOUND", "BAD_REQUEST" o "ERROR"
+    """
+    try:
+        anio_int = int(anio)
+    except (TypeError, ValueError):
+        return None, "BAD_REQUEST"  # Entrada inválida
+
+    if not pais or not isinstance(pais, str):
+        return None, "BAD_REQUEST"
+
+    query = """
+        SELECT 
+            p.order_id,
+            p.date,
+            p.total,
+            u.name AS user_name
+        FROM Pedido p
+        JOIN Usuario u ON p.user_id = u.user_id
+        WHERE u.nationality = :pais
+          AND DATE_PART('year', p.date) = :anio
+        ORDER BY p.date ASC
+    """
+    params = {"anio": anio_int, "pais": pais}
+    try:
+        data = await fetch_all(engine, query, params=params)
+    except Exception:
+        return None, "ERROR"
+
+    if data is None or data is False:
+        return None, "NOT_FOUND"
+    return data, "OK"
+
+# =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
 
@@ -1415,7 +1462,48 @@ async def http_rate_movie():
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
+@app.route("/estadisticaVentas/<anio>/<pais>", methods=["GET"])
+async def http_estadistica_ventas(anio, pais):
+    """
+    Endpoint HTTP para obtener los pedidos de un año y país concretos.
 
+    - Método: GET
+    - Path: /estadisticaVentas/<anio>/<pais>
+    - Headers: Authorization: Bearer <token_admin>
+    - Comportamiento: Verifica que el token pertenezca a un admin y llama a
+      estadistica_ventas(anio, pais) para recuperar los pedidos (id, fecha,
+      total y nombre de usuario).
+    - Respuestas esperadas:
+        HTTPStatus.OK: devuelve la lista de pedidos.
+        HTTPStatus.BAD_REQUEST: falta Authorization Bearer.
+        HTTPStatus.UNAUTHORIZED: token no válido o no es admin.
+        HTTPStatus.NOT_FOUND: sin datos para la consulta.
+        HTTPStatus.INTERNAL_SERVER_ERROR: error al obtener la estadística.
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
+
+        # Verificar si el usuario es admin
+        if not await user.comprobar_token_admin(token):
+            return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
+        
+        data, status = await estadistica_ventas(anio, pais)
+        if status == "OK":
+            return jsonify(data), HTTPStatus.OK
+        if status == "BAD_REQUEST":
+            return jsonify({'status': 'ERROR', 'message': 'Parámetros de entrada inválidos.'}), HTTPStatus.BAD_REQUEST
+        if status == "NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'No se encontraron datos para la estadística solicitada.'}), HTTPStatus.NOT_FOUND
+        return jsonify({'status': 'ERROR', 'message': 'Error al obtener la estadística de ventas.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+    
 
 # =============================================================================
 # PUNTO DE ENTRADA PRINCIPAL

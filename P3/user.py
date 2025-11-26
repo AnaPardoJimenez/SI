@@ -174,7 +174,7 @@ async def fetch_all(engine, query, params={}):
 # FUNCIONES DE GESTIÓN DE USUARIOS
 # =============================================================================
 
-async def create_user(username, password):
+async def create_user(username, password, nationality):
     """
     Crea un nuevo usuario con el nombre de usuario y contraseña dados.
     Si el usuario ya existe, intenta hacer login en su lugar.
@@ -185,6 +185,7 @@ async def create_user(username, password):
     Args:
         username (str): El nombre de usuario del nuevo usuario.
         password (str): El hash SHA-512 de la contraseña (ya hasheada en el endpoint).
+        nationality (str): Nacionalidad del usuario.
 
     Returns:
         tuple or None: 
@@ -194,6 +195,7 @@ async def create_user(username, password):
     """
     # Si el usuario ya existe, hacer login en su lugar
     uid, error_code = await get_user_id(username)
+    print(uid, error_code)
     if error_code == 'OK':
         return None, False  # No se creó, ya existía
     
@@ -202,9 +204,9 @@ async def create_user(username, password):
 
     token = str(uuid.uuid5(Secret_uuid, uid))
 
-    query = "INSERT INTO Usuario (user_id, name, password, token, balance, admin) \
-                    VALUES (:user_id, :name, :password, :token, :balance, :admin)"
-    params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 0, "admin": False}
+    query = "INSERT INTO Usuario (user_id, name, password, token, balance, admin, nationality) \
+                    VALUES (:user_id, :name, :password, :token, :balance, :admin, :nationality)"
+    params = {"user_id": uid, "name": username, "password": password, "token": token, "balance": 0, "admin": False, "nationality": nationality}
     await fetch_all(engine, query, params)
 
     query = "INSERT INTO Carrito (user_id) \
@@ -264,9 +266,9 @@ async def get_user_id(username):
 # FUNCIONES DE MODIFICACIÓN DE USUARIOS
 # =============================================================================
 
-async def update_user(uid, username=None, password=None):
+async def update_user(uid, username=None, password=None, nationality=None):
     """
-    Actualiza el nombre y/o la contraseña de un usuario dado.
+    Actualiza el nombre, la contraseña y/o la nacionalidad de un usuario dado.
 
     NOTA: La contraseña debe llegar ya hasheada (SHA-512 + salt). El hashing se
     realiza en el endpoint HTTP antes de llamar a esta función.
@@ -275,6 +277,7 @@ async def update_user(uid, username=None, password=None):
         uid (str): ID del usuario a actualizar.
         username (str | None): Nuevo nombre de usuario (None para mantener).
         password (str | None): Nuevo hash de contraseña (None para mantener).
+        nationality (str | None): Nueva nacionalidad (None para mantener).
 
     Returns:
         tuple: (success: bool, error_code: str)
@@ -282,7 +285,7 @@ async def update_user(uid, username=None, password=None):
             - (False, "NOT_FOUND") si el usuario no existe o no se actualizó.
             - (False, "NO_FIELDS") si no se envió ningún campo a actualizar.
     """
-    if username is None and password is None:
+    if username is None and password is None and nationality is None:
         return False, "NO_FIELDS"
 
     if not await user_exists(uid):
@@ -296,6 +299,9 @@ async def update_user(uid, username=None, password=None):
     if password is not None:
         fields.append("password = :password")
         params["password"] = password
+    if nationality is not None:
+        fields.append("nationality = :nationality")
+        params["nationality"] = nationality
 
     query = f"UPDATE Usuario SET {', '.join(fields)} WHERE user_id LIKE :uid"
     data = await fetch_all(engine, query, params)
@@ -480,8 +486,12 @@ async def http_create_user():
             return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "password"'}), HTTPStatus.BAD_REQUEST
         # Hashear la contraseña
         password = hashlib.sha512((password + SALT).encode('utf-8')).hexdigest()
+
+        nationality = body.get("nationality")
+        if not nationality:
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "nationality"'}), HTTPStatus.BAD_REQUEST
         
-        result = await create_user(name, password)
+        result = await create_user(name, password, nationality)
         if result is None:
             return jsonify({'status': 'ERROR', 'message': 'Credenciales incorrectas'}), HTTPStatus.UNAUTHORIZED
 
@@ -580,14 +590,15 @@ async def http_update_user(uid):
         
         username = body.get("name")
         password = body.get("password")
+        nationality = body.get("nationality")
 
-        if username is None and password is None:
+        if username is None and password is None and nationality is None:
             return jsonify({'status': 'ERROR', 'message': 'Debe proporcionarse al menos un campo a actualizar'}), HTTPStatus.BAD_REQUEST
 
         if password is not None:
             password = hashlib.sha512((password + SALT).encode('utf-8')).hexdigest()
 
-        success, error_code = await update_user(uid, username, password)
+        success, error_code = await update_user(uid, username, password, nationality)
         if not success:
             if error_code == "NOT_FOUND":
                 return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND

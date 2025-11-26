@@ -34,6 +34,7 @@ Requisitos:
 """
 
 from math import e
+from datetime import datetime
 import uuid
 import requests
 from http import HTTPStatus
@@ -85,40 +86,8 @@ def main():
 
     headers_admin = {"Authorization": f"Bearer {token_admin}"}
 
-    print("# =======================================================")
-    print("# Pruebas de creación/actualización/eliminación de películas")
-    print("# =======================================================")
-
-    test_title = f"Test Movie {uuid.uuid4().hex[:8]}"
-    new_movie = {
-        "title": test_title,
-        "description": "Película de prueba",
-        "year": 2024,
-        "genre": "Test",
-        "price": 5.5,
-    }
-
-    r = requests.put(f"{CATALOG}/movies", json=new_movie, headers=headers_admin)
-    ok("Crear película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
-
-    r = requests.get(f"{CATALOG}/movies", params={"title": test_title}, headers=headers_admin)
-    movieid_test = None
-    if ok("Localizar película recién creada", r.status_code == HTTPStatus.OK and r.json()):
-        movieid_test = r.json()[0]["movieid"]
-        print(f"\tID de la película de prueba: {movieid_test}")
-
-    if movieid_test:
-        r = requests.post(f"{CATALOG}/movies", json={"movieid": movieid_test, "genre": "UpdatedGenre"}, headers=headers_admin)
-        ok("Actualizar película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
-
-        r = requests.delete(f"{CATALOG}/movies", json={"movieid": movieid_test}, headers=headers_admin)
-        ok("Eliminar película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
-
-        r = requests.get(f"{CATALOG}/movies/{movieid_test}", headers=headers_admin)
-        ok("Consultar película eliminada devuelve NOT_FOUND", r.status_code == HTTPStatus.NOT_FOUND)
-
     # Se asume que el usuario 'Alice' no existe
-    r = requests.put(f"{USERS}/user", json={"name": "alice", "password": "secret"}, headers=headers_admin)
+    r = requests.put(f"{USERS}/user", json={"name": "alice", "password": "secret", "nationality": "Estados Unidos"}, headers=headers_admin)
     if ok("Crear usuario 'alice'", r.status_code == HTTPStatus.OK and r.json()):
         data = r.json()
         uid_alice, _ = data["uid"], data["username"]
@@ -141,7 +110,7 @@ def main():
     headers_alice = {"Authorization": f"Bearer {token_alice}"}
 
     # Test: Intentar crear usuario con token de usuario no administrador (debe fallar con UNAUTHORIZED)
-    r = requests.put(f"{USERS}/user", json={"name": "aleatorio", "password": "aleatorio"}, headers=headers_alice)
+    r = requests.put(f"{USERS}/user", json={"name": "aleatorio", "password": "aleatorio", "nationality": "Estados Unidos"}, headers=headers_alice)
     ok("Crear usuario 'aleatorio' con token de usuario 'alice' falla", r.status_code == HTTPStatus.UNAUTHORIZED)
 
     # Test: Intentar borrar usuario con token de usuario no administrador (debe fallar con UNAUTHORIZED)
@@ -267,36 +236,67 @@ def main():
                 else:
                     print("\tEl carrito está vacío.")
 
-#     # Checkout del carrito con saldo insuficiente
-#     r = requests.post(f"{CATALOG}/cart/checkout", headers=headers_alice)
-#     ok("Checkout del carrito con saldo insuficiente", r.status_code == HTTPStatus.PAYMENT_REQUIRED)
+    # Checkout del carrito con saldo insuficiente
+    r = requests.post(f"{CATALOG}/cart/checkout", headers=headers_alice)
+    ok("Checkout del carrito con saldo insuficiente", r.status_code == HTTPStatus.PAYMENT_REQUIRED)
 
-#     # Aumentar el saldo de alice a un valor muy alto
-#     r = requests.post(f"{CATALOG}/user/credit", json={"amount": 1000000}, headers=headers_alice)
-#     if ok("Aumentar el saldo de alice", r.status_code == HTTPStatus.OK and r.json()):
-#         saldo = float(r.json()["new_credit"])
-#         print(f"\tSaldo actualizado a {saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+    # Aumentar el saldo de alice a un valor muy alto
+    r = requests.post(f"{CATALOG}/user/credit", json={"amount": 1000000}, headers=headers_alice)
+    if ok("Aumentar el saldo de alice", r.status_code == HTTPStatus.OK and r.json()):
+        saldo = float(r.json()["new_credit"])
+        print(f"\tSaldo actualizado a {saldo:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
 
-#     # Checkout del carrito
-#     r = requests.post(f"{CATALOG}/cart/checkout", headers=headers_alice)
-#     if ok("Checkout del carrito", r.status_code == HTTPStatus.OK and r.json()):
-#         data = r.json()
-#         print(f"\tPedido {data['orderid']} creado correctamente:")
+    # Checkout del carrito
+    r = requests.post(f"{CATALOG}/cart/checkout", headers=headers_alice)
+    if ok("Checkout del carrito", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        print(f"\tPedido {data['orderid']} creado correctamente:")
 
-#         # Obtener datos del pedido
-#         r = requests.get(f"{CATALOG}/orders/{data['orderid']}", headers=headers_alice)
-#         if ok(f"Recuperar datos del pedido {data['orderid']}", r.status_code == HTTPStatus.OK and r.json()):
-#             order = r.json()
-#             print(f"\tFecha: {order['date']}\n\tPrecio: {order['total']}")
-#             print("\tContenidos:")
-#             for movie in order['movies']:
-#                     print(f"\t- [{movie['movieid']}] {movie['title']} ({movie['price']})")
+        # Obtener datos del pedido
+        r = requests.get(f"{CATALOG}/orders/{data['orderid']}", headers=headers_alice)
+        if ok(f"Recuperar datos del pedido {data['orderid']}", r.status_code == HTTPStatus.OK and r.json()):
+            order = r.json()
+            print(f"\tFecha: {order['date']}\n\tPrecio: {order['total']}")
+            print("\tContenidos:")
+            for movie in order['movies']:
+                    print(f"\t- [{movie['movieid']}] {movie['title']} ({movie['price']})")
         
 
-#         # Test: Verificar que el carrito está vacío después del checkout
-#         r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
-#         ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
+        # Test: Verificar que el carrito está vacío después del checkout
+        r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+        ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
 
+    print("# =======================================================")
+    print("# Pruebas de creación/actualización/eliminación de películas")
+    print("# =======================================================")
+
+    test_title = f"Test Movie {uuid.uuid4().hex[:8]}"
+    new_movie = {
+        "title": test_title,
+        "description": "Película de prueba",
+        "year": 2024,
+        "genre": "Test",
+        "price": 5.5,
+    }
+
+    r = requests.put(f"{CATALOG}/movies", json=new_movie, headers=headers_admin)
+    ok("Crear película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
+
+    r = requests.get(f"{CATALOG}/movies", params={"title": test_title}, headers=headers_admin)
+    movieid_test = None
+    if ok("Localizar película recién creada", r.status_code == HTTPStatus.OK and r.json()):
+        movieid_test = r.json()[0]["movieid"]
+        print(f"\tID de la película de prueba: {movieid_test}")
+
+    if movieid_test:
+        r = requests.post(f"{CATALOG}/movies", json={"movieid": movieid_test, "genre": "UpdatedGenre"}, headers=headers_admin)
+        ok("Actualizar película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
+
+        r = requests.delete(f"{CATALOG}/movies", json={"movieid": movieid_test}, headers=headers_admin)
+        ok("Eliminar película de prueba", r.status_code == HTTPStatus.OK and r.json().get("status") == "OK")
+
+        r = requests.get(f"{CATALOG}/movies/{movieid_test}", headers=headers_admin)
+        ok("Consultar película eliminada devuelve NOT_FOUND", r.status_code == HTTPStatus.NOT_FOUND)
     
 #     print("# =======================================================")
 #     print("# Votar películas")
@@ -490,6 +490,7 @@ def main():
 
     nuevo_nombre = "alice_mod"
     nueva_password = "secret2"
+    pais_alice = "Estados Unidos"
 
     r = requests.put(
         f"{USERS}/user/{uid_alice}",
@@ -503,6 +504,57 @@ def main():
         data = r.json()
         token_alice = data["token"]
         headers_alice = {"Authorization": f"Bearer {token_alice}"}
+
+    print("# =======================================================")
+    print("# Estadística de ventas (admin)")
+    print("# =======================================================")
+
+    # Crear un pedido para usuario de otro país y comprobar que no aparece en las estadísticas de Alice
+    pais_bob = "Reino Unido"
+    r = requests.get(f"{USERS}/user", json={"name": "bob", "password": "secret"})
+    if not (r.status_code == HTTPStatus.OK and r.json()):
+        r_create_bob = requests.put(
+            f"{USERS}/user",
+            json={"name": "bob", "password": "secret", "nationality": pais_bob},
+            headers=headers_admin,
+        )
+        ok("Crear usuario 'bob' para test de estadística", r_create_bob.status_code == HTTPStatus.OK and r_create_bob.json())
+        r = requests.get(f"{USERS}/user", json={"name": "bob", "password": "secret"})
+
+    if ok("Login usuario 'bob'", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        uid_bob = data["uid"]
+        token_bob = data["token"]
+        headers_bob = {"Authorization": f"Bearer {token_bob}"}
+
+        # Asegurar que hay una película que comprar
+        if not movieids:
+            r_movies = requests.get(f"{CATALOG}/movies", headers=headers_bob)
+            if ok("Obtener catálogo para bob", r_movies.status_code == HTTPStatus.OK and r_movies.json()):
+                movieids = [m["movieid"] for m in r_movies.json()]
+
+        if movieids:
+            movie_to_buy = movieids[0]
+            requests.post(f"{CATALOG}/user/credit", json={"amount": 100}, headers=headers_bob)
+            requests.put(f"{CATALOG}/cart/{movie_to_buy}", headers=headers_bob)
+            r_checkout = requests.post(f"{CATALOG}/cart/checkout", headers=headers_bob)
+            ok("Checkout de bob", r_checkout.status_code == HTTPStatus.OK)
+
+    year_param = datetime.now().year
+    country_param = pais_alice
+    r = requests.get(f"{CATALOG}/estadisticaVentas/{year_param}/{country_param}", headers=headers_admin)
+    ok("Consultar estadística de ventas por año y país", r.status_code in (HTTPStatus.OK, HTTPStatus.NOT_FOUND))
+    if r.status_code == HTTPStatus.OK:
+        orders = r.json()
+        print(f"\tDevolvió {len(orders)} pedido(s) para {country_param} en {year_param}")
+        for order in orders:
+            print(f"\t- Pedido {order['order_id']} de usuario {order['user_name']} por {order['total']} en fecha {order['date']}")
+
+    r = requests.get(f"{CATALOG}/estadisticaVentas/{year_param}/{pais_bob}", headers=headers_admin)
+    ok("Consultar estadística de ventas por país sin compras", r.status_code in (HTTPStatus.OK, HTTPStatus.NOT_FOUND))
+    if r.status_code == HTTPStatus.OK:
+        orders = r.json()
+        ok("No devuelve pedidos para país sin compras", len(orders) == 0)
     
     print("# =======================================================")
     print("# Limpiar base de datos")
@@ -515,6 +567,14 @@ def main():
     # Test: Intentar borrar un usuario que ya no existe (debe fallar con NOT_FOUND)
     r = requests.delete(f"{USERS}/user/{uid_alice}", headers=headers_admin)
     ok("Borrar usuario inexistente", r.status_code == HTTPStatus.NOT_FOUND)
+
+    # Test: Borrar usuario 'bob' con token de administrador
+    r = requests.delete(f"{USERS}/user/{uid_bob}", headers=headers_admin)
+    ok("Borrar usuario bob", r.status_code == HTTPStatus.OK)
+
+    # Test: Intentar borrar un usuario que ya no existe (bob)
+    r = requests.delete(f"{USERS}/user/{uid_bob}", headers=headers_admin)
+    ok("Borrar usuario bob inexistente", r.status_code == HTTPStatus.NOT_FOUND)
 
     print("\nPruebas completadas.")
 
