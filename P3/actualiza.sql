@@ -31,6 +31,8 @@ BEGIN
     SET balance = balance - NEW.total
     WHERE user_id = NEW.user_id;
 
+    PERFORM pg_sleep(5);
+
     -- Vaciar el carrito del usuario (eliminar Carrito_Pelicula y Carrito)
     DELETE FROM Carrito_Pelicula
     WHERE cart_id = NEW.order_id;

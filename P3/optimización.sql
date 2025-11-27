@@ -18,3 +18,80 @@ CREATE INDEX idx_pedido_date_user ON Pedido(user_id, date);
 --             AND p.date >= '2025-01-01'
 --             AND p.date < '2026-01-01'
 --         ORDER BY p.date ASC;
+
+INSERT INTO Usuario (user_id, name, password, token, nationality, admin) VALUES
+('100', 'deadlock_user', 'deadlock', 'dead', 'lock', FALSE);
+
+INSERT INTO Pedido(order_id, user_id, total, date) VALUES
+(100, '100', 100, '2025-11-27');
+
+BEGIN;
+
+UPDATE Pedido 
+SET paid = true
+WHERE order_id = 100;
+
+-- Llega a sleep
+UPDATE Usuario
+SET discount = 10
+WHERE user_id = '100';
+
+COMMIT;
+
+
+
+BEGIN;
+
+UPDATE Usuario
+SET discount = 20
+WHERE user_id = '100';
+
+-- Update balance
+UPDATE Usuario
+SET balance = 100
+WHERE user_id = '100';
+
+COMMIT;
+
+
+
+
+
+
+
+INSERT INTO Usuario (user_id, name, password, token, nationality, admin) VALUES
+('100', 'deadlock_user', 'deadlock', 'dead', 'lock', FALSE);
+
+INSERT INTO Pedido(order_id, user_id, total, date) VALUES
+(100, '100', 100, '2025-11-27');
+
+BEGIN;
+
+UPDATE Usuario
+SET discount = 10
+WHERE user_id = '100';
+
+-- Llega a sleep
+SELECT pg_sleep(5);
+
+-- Vaciar el carrito del usuario (eliminar Carrito_Pelicula y Carrito)
+DELETE FROM Carrito_Pelicula
+WHERE cart_id = 100;
+
+COMMIT;
+
+
+BEGIN;
+
+UPDATE Carrito
+SET user_id = user_id
+WHERE user_id = '100';
+
+-- Llega a sleep
+SELECT pg_sleep(5);
+
+UPDATE Usuario
+SET discount = 20
+WHERE user_id = '100';
+
+COMMIT;
