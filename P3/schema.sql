@@ -61,7 +61,7 @@ CREATE TABLE Peliculas (
     price DECIMAL(10,2),
     rating DECIMAL(10,2),
     stock INT DEFAULT 0,
-    votes INT
+    votes INT DEFAULT 0
 );
 
 -- =============================================================================
@@ -125,6 +125,7 @@ CREATE TABLE Pedido (
     user_id VARCHAR(37) NOT NULL,
     total DECIMAL(10,2) NOT NULL,
     date TIMESTAMP NOT NULL,
+    paid BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (user_id) REFERENCES Usuario(user_id) ON DELETE CASCADE
 );
 
@@ -135,6 +136,7 @@ CREATE TABLE Pedido (
 CREATE TABLE Pedido_Pelicula (
     order_id INT,
     movieid INT,
+    quantity INT DEFAULT 1,
     PRIMARY KEY (order_id, movieid),
     FOREIGN KEY (order_id) REFERENCES Pedido(order_id) ON DELETE CASCADE,
     FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE

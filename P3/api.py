@@ -484,16 +484,21 @@ async def checkout(token):
     if (current_balance := await get_balance(user_id)) is None: return None, "BALANCE_NOT_FOUND"
     # Verificar si el saldo es suficiente para pagar el carrito
     if (current_balance - total) < 0: return None, "INSUFFICIENT_BALANCE"
-
     # Crear el pedido
-    if (order_id := await create_order(user_id, total)) is not True: return None, "CREATE_ORDER_FAILED"
+    if (order_id := await create_order(user_id, total)) is None: return None, "CREATE_ORDER_FAILED"
     # Añadir las películas al pedido
     if (await add_movies_to_order(order_id)) is not True: return None, "ADD_MOVIES_TO_ORDER_FAILED"
-
+    query = """
+        UPDATE Pedido
+        SET paid = TRUE
+        WHERE order_id = :order_id
+    """
+    params = {"order_id": order_id}
+    if (await fetch_all(engine, query, params=params)) is None: return None, "UPDATE_PAID_FAILED"
     # Actualizar el saldo del usuario
-    if (await add_to_balance(user_id, -total)) is not True: return None, "ADD_TO_BALANCE_FAILED"
+    #if (await add_to_balance(user_id, -total)) is not True: return None, "ADD_TO_BALANCE_FAILED"
     # Eliminar las películas del carrito
-    if (await empty_cart(user_id)) is not True: return None, "EMPTY_CART_FAILED"
+    #if (await empty_cart(user_id)) is not True: return None, "EMPTY_CART_FAILED"
 
     query = """
         SELECT order_id
@@ -597,28 +602,36 @@ async def rate_movie(user_id, movieid, rating):
     if result[1] != "OK": return "MOVIE_NOT_FOUND"
 
     query = """
+        SELECT rating
+        FROM Calificacion
+        WHERE movieid = :movieid AND user_id = :user_id
+    """
+    params = {"movieid": movieid, "user_id": user_id}
+    result = await fetch_all(engine, query, params=params)
+    if result is False or result is None:
+        query = """
+            UPDATE Peliculas
+            SET votes = votes + 1
+            WHERE movieid = :movieid
+        """
+        params = {"movieid": movieid}
+        await fetch_all(engine, query, params=params)
+    
+    query = """
         INSERT INTO Calificacion (user_id, movieid, rating)
         VALUES (:user_id, :movieid, :rating)
         ON CONFLICT(user_id, movieid) DO UPDATE SET rating = :rating
     """
     params = {"user_id": user_id, "movieid": movieid, "rating": rating}
-    try:
-        result = await fetch_all(engine, query, params=params)
-        # No hay garantía de filas devueltas en UPDATE/INSERT
-    except Exception as exc:
-        return "CALIFICATION_FAILED"
+    await fetch_all(engine, query, params=params)
 
     query_update = """
         UPDATE Peliculas
-        SET rating = (SELECT AVG(rating) FROM Calificacion WHERE movieid = :movieid),
-            votes = (SELECT COUNT(*) FROM Calificacion WHERE movieid = :movieid)
+        SET rating = media_rating(:movieid)
         WHERE movieid = :movieid
     """
     params_update = {"movieid": movieid}
-    try:
-        result_upd = await fetch_all(engine, query_update, params=params_update)
-    except Exception as exc:
-        return "UPDATE_MOVIE_FAILED"
+    await fetch_all(engine, query_update, params=params_update)
 
     return "OK"
 
@@ -756,7 +769,7 @@ async def get_cart_total(user_id):
         float: Precio total del carrito, 0.0 si está vacío, o None en caso de error
     """
     query = """
-        SELECT SUM(p.price) as total
+        SELECT SUM(p.price * cp.quantity) as total
             FROM Carrito c
                 JOIN Carrito_Pelicula cp ON c.cart_id = cp.cart_id
                 JOIN Peliculas p ON cp.movieid = p.movieid
@@ -868,7 +881,9 @@ async def create_order(user_id, total):
         RETURNING order_id
     """
     params = {"order_id": cart_id, "user_id": user_id, "total": total}
-    return await fetch_all(engine, query, params=params)
+    if await fetch_all(engine, query, params=params) is not True:
+        return None
+    return cart_id
 
 async def add_movies_to_order(order_id):
     """
@@ -881,8 +896,8 @@ async def add_movies_to_order(order_id):
         bool: True si se añadieron correctamente, False en caso contrario
     """
     query = """
-        INSERT INTO Pedido_Pelicula (order_id, movieid)
-        SELECT :order_id, movieid
+        INSERT INTO Pedido_Pelicula (order_id, movieid, quantity)
+        SELECT :order_id, movieid, quantity
         FROM Carrito_Pelicula
         WHERE cart_id = :cart_id
     """
@@ -1343,6 +1358,8 @@ async def http_checkout():
             return jsonify({'status': 'ERROR', 'message': 'No se pudo crear el pedido.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         elif result == "ADD_MOVIES_TO_ORDER_FAILED":
             return jsonify({'status': 'ERROR', 'message': 'No se pudo añadir las películas al pedido.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+        elif result == "UPDATE_PAID_FAILED":
+            return jsonify({'status': 'ERROR', 'message': 'No se pudo actualizar el pago del pedido.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         else:
             return jsonify({'status': 'ERROR', 'message': 'El servidor se rehusa a preparar café porque es una tetera.'}), HTTPStatus.IM_A_TEAPOT
     except Exception as exc:
