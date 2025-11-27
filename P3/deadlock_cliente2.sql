@@ -15,7 +15,7 @@
 --     - DELETE Carrito_Pelicula (línea 37 de actualiza.sql) - intenta lock en Carrito_Pelicula
 --   
 --   Cliente 2 (este script):
---     - DELETE Carrito_Pelicula - adquiere lock en Carrito_Pelicula
+--     - UPDATE Carrito_Pelicula - adquiere lock en Carrito_Pelicula
 --     - Espera 5 segundos
 --     - UPDATE Usuario - intenta lock en Usuario (que Cliente 1 ya tiene)
 --   
@@ -28,7 +28,8 @@ SELECT 'Cliente 2: Iniciando transacción...' AS status;
 
 -- Paso 1: Adquirir lock en Carrito_Pelicula (este lock bloqueará al trigger)
 -- Usamos el mismo cart_id que el trigger intentará eliminar
-DELETE FROM Carrito_Pelicula
+UPDATE Carrito_Pelicula
+SET quantity = quantity + 1
 WHERE cart_id = 1;
 
 SELECT 'Cliente 2: Lock adquirido en Carrito_Pelicula (cart_id=1)' AS status;
