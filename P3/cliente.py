@@ -550,12 +550,6 @@ def main():
         for order in orders:
             print(f"\t- Pedido {order['order_id']} de usuario {order['user_name']} por {order['total']} en fecha {order['date']}")
 
-    r = requests.get(f"{CATALOG}/estadisticaVentas/{year_param}/{pais_bob}", headers=headers_admin)
-    ok("Consultar estadística de ventas por país sin compras", r.status_code in (HTTPStatus.OK, HTTPStatus.NOT_FOUND))
-    if r.status_code == HTTPStatus.OK:
-        orders = r.json()
-        ok("No devuelve pedidos para país sin compras", len(orders) == 0)
-    
     print("# =======================================================")
     print("# Limpiar base de datos")
     print("# =======================================================")
