@@ -473,6 +473,57 @@ def main():
     if ok("Consultar descuento de 'alice' con su token", r.status_code == HTTPStatus.OK and r.json().get("discount") == discount_value):
         print(f"\tDescuento actual: {r.json().get('discount')}%")
 
+        # --- Test adicional: comprar una película y verificar que se aplica el descuento ---
+        # Nos aseguramos de tener al menos una película para comprar
+        if not movieids:
+            rr = requests.get(f"{CATALOG}/movies", headers=headers_alice)
+            if ok("Recuperar catálogo para seleccionar película de compra", rr.status_code == HTTPStatus.OK and rr.json()):
+                movieids = [m["movieid"] for m in rr.json()]
+
+        if movieids:
+            movie_to_buy = movieids[0]
+            # Recuperar detalles para conocer el precio original
+            rr = requests.get(f"{CATALOG}/movies/{movie_to_buy}", headers=headers_alice)
+            if ok("Obtener detalles de la película a comprar", rr.status_code == HTTPStatus.OK and rr.json()):
+                movie_info = rr.json()
+                price = float(movie_info["price"])
+
+                # Vaciar el carrito por si acaso
+                requests.delete(f"{CATALOG}/cart/{movie_to_buy}", headers=headers_alice)
+
+                # Añadir la película al carrito
+                r_add = requests.put(f"{CATALOG}/cart/{movie_to_buy}", headers=headers_alice)
+                ok(f"Añadir película ID [{movie_to_buy}] al carrito para comprobar descuento", r_add.status_code == HTTPStatus.OK)
+
+                # Asegurar saldo suficiente y hacer checkout
+                # Añadimos un crédito lo suficientemente alto
+                r_credit = requests.post(f"{CATALOG}/user/credit", json={"amount": 1000}, headers=headers_alice)
+                ok("Aumentar saldo de alice antes del checkout", r_credit.status_code == HTTPStatus.OK)
+
+                # Realizar diagnóstico: consultar qué descuento ve el catálogo
+                rr_debug = requests.get(f"{CATALOG}/debug/user/{uid_alice}/discount")
+                if rr_debug.status_code == HTTPStatus.OK:
+                    print(f"\t[DEBUG] Discount (catalog) = {rr_debug.json().get('discount')}")
+                else:
+                    print(f"\t[DEBUG] Catalog returned {rr_debug.status_code} on debug discount")
+
+                # Realizar checkout
+                r_checkout = requests.post(f"{CATALOG}/cart/checkout", headers=headers_alice)
+                ok("Checkout con descuento (respuesta) ", r_checkout.status_code == HTTPStatus.OK and r_checkout.json())
+                if r_checkout.status_code == HTTPStatus.OK and r_checkout.json():
+                    orderid = r_checkout.json().get('orderid')
+                    # Recuperar detalles del pedido
+                    r_order = requests.get(f"{CATALOG}/orders/{orderid}", headers=headers_alice)
+                    ok("Obtener detalles del pedido tras checkout", r_order.status_code == HTTPStatus.OK and r_order.json())
+                    if r_order.status_code == HTTPStatus.OK and r_order.json():
+                        order = r_order.json()
+                        # Calcular precio esperado con descuento
+                        expected = round(price * (1 - (discount_value / 100.0)), 2)
+                        print(price)
+                        total_order = float(order.get('total'))
+                        ok(f"El total del pedido [{orderid}] aplica el descuento ({discount_value}%)", total_order == expected)
+                        print(total_order, expected)
+
     # Consultar descuento de alice con token ajeno (debe fallar)
     r = requests.get(f"{USERS}/user/{uid_alice}/discount", headers=headers_admin)
     ok("Consultar descuento de 'alice' con token admin falla", r.status_code == HTTPStatus.UNAUTHORIZED)

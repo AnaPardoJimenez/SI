@@ -782,6 +782,26 @@ async def get_cart_total(user_id):
         # Si total es None (carrito vacío), retornar 0.0
         if total is None:
             return 0.0
+        try:
+            q2 = """
+                SELECT discount FROM Usuario WHERE user_id LIKE :target_uid
+            """
+            res2 = await fetch_all(engine, q2, params={"target_uid": user_id})
+            # Comprueba que res2 contiene filas y que el campo discount no es None
+            if res2 is not None:
+                print("Descuento encontrado para el usuario:", res2[0]["discount"])
+                try:
+                    discount = float(res2[0]["discount"])
+                except (ValueError, TypeError):
+                    discount = 0.0
+                # El valor del descuento está garantizado entre 0 y 100, pero por
+                # seguridad lo recortamos a ese rango
+                if discount > 0.0 and discount <= 100.0:
+                    total = total * (1 - (discount / 100.0))
+                    print("Descuento aplicado:", discount, "% TOTAL:", total)
+                    return float(total)
+        except Exception:
+            return float(total)
         return float(total)
     else:
         return None
