@@ -480,6 +480,7 @@ async def checkout(token):
     if (user_id := await get_user_id(token)) is None: return None, "USER_NOT_FOUND"
     # Obtener el total del carrito
     if (total := await get_cart_total(user_id)) is None: return None, "PRICE_NOT_FOUND"
+    print("Total del carrito en checkout:", total)
     # Obtener el saldo del usuario
     if (current_balance := await get_balance(user_id)) is None: return None, "BALANCE_NOT_FOUND"
     # Verificar si el saldo es suficiente para pagar el carrito
@@ -500,17 +501,8 @@ async def checkout(token):
     # Eliminar las películas del carrito
     #if (await empty_cart(user_id)) is not True: return None, "EMPTY_CART_FAILED"
 
-    query = """
-        SELECT order_id
-        FROM Pedido
-        WHERE user_id = :user_id
-    """
-    params = {"user_id": user_id}
-    result = await fetch_all(engine, query, params=params)
-    if result:
-        return result[0]["order_id"], "OK"
-    else:
-        return None, "ORDER_ID_NOT_FOUND"
+    # order_id coincide con el cart_id del usuario, así que lo devolvemos directamente
+    return order_id, "OK"
 
 async def get_order(order_id):
     """
@@ -782,27 +774,30 @@ async def get_cart_total(user_id):
         # Si total es None (carrito vacío), retornar 0.0
         if total is None:
             return 0.0
+        # Convertimos a float una vez para evitar errores con Decimal
+        try:
+            total = float(total)
+        except (TypeError, ValueError):
+            return None
         try:
             q2 = """
                 SELECT discount FROM Usuario WHERE user_id LIKE :target_uid
             """
             res2 = await fetch_all(engine, q2, params={"target_uid": user_id})
-            # Comprueba que res2 contiene filas y que el campo discount no es None
-            if res2 is not None:
+            if res2 and res2[0].get("discount") is not None:
                 print("Descuento encontrado para el usuario:", res2[0]["discount"])
                 try:
                     discount = float(res2[0]["discount"])
+                    print("Descuento convertido a float:", discount)
                 except (ValueError, TypeError):
                     discount = 0.0
-                # El valor del descuento está garantizado entre 0 y 100, pero por
-                # seguridad lo recortamos a ese rango
-                if discount > 0.0 and discount <= 100.0:
+                if 0.0 < discount <= 100.0:
                     total = total * (1 - (discount / 100.0))
-                    print("Descuento aplicado:", discount, "% TOTAL:", total)
-                    return float(total)
+                    print("Total después de aplicar descuento:", total)
         except Exception:
-            return float(total)
-        return float(total)
+            pass
+        print("Total del carrito:", round(float(total), 2))
+        return round(float(total), 2)
     else:
         return None
 

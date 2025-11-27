@@ -473,56 +473,49 @@ def main():
     if ok("Consultar descuento de 'alice' con su token", r.status_code == HTTPStatus.OK and r.json().get("discount") == discount_value):
         print(f"\tDescuento actual: {r.json().get('discount')}%")
 
-        # --- Test adicional: comprar una película y verificar que se aplica el descuento ---
-        # Nos aseguramos de tener al menos una película para comprar
-        if not movieids:
-            rr = requests.get(f"{CATALOG}/movies", headers=headers_alice)
-            if ok("Recuperar catálogo para seleccionar película de compra", rr.status_code == HTTPStatus.OK and rr.json()):
-                movieids = [m["movieid"] for m in rr.json()]
+        # --- Test sencillo: añadir una película al carrito y comprobar total con descuento ---
+        movie_for_discount = movieids[0] if movieids else None
+        if movie_for_discount is None:
+            r_movies = requests.get(f"{CATALOG}/movies", headers=headers_alice)
+            if ok("Recuperar catálogo para test sencillo de descuento", r_movies.status_code == HTTPStatus.OK and r_movies.json()):
+                movieids = [m["movieid"] for m in r_movies.json()]
+                movie_for_discount = movieids[0] if movieids else None
 
-        if movieids:
-            movie_to_buy = movieids[0]
-            # Recuperar detalles para conocer el precio original
-            rr = requests.get(f"{CATALOG}/movies/{movie_to_buy}", headers=headers_alice)
-            if ok("Obtener detalles de la película a comprar", rr.status_code == HTTPStatus.OK and rr.json()):
-                movie_info = rr.json()
-                price = float(movie_info["price"])
+        if movie_for_discount is not None:
+            r_movie_info = requests.get(f"{CATALOG}/movies/{movie_for_discount}", headers=headers_alice)
+            if ok(f"Obtener datos de la película [{movie_for_discount}] para test de descuento",
+                  r_movie_info.status_code == HTTPStatus.OK and r_movie_info.json()):
+                movie_info = r_movie_info.json()
+                price_base = float(movie_info["price"])
+                expected_total = round(price_base * (1 - (discount_value / 100.0)), 2)
 
-                # Vaciar el carrito por si acaso
-                requests.delete(f"{CATALOG}/cart/{movie_to_buy}", headers=headers_alice)
+                # Vaciar carrito para garantizar que solo contiene esta película
+                # Vaciar el carrito por completo antes de añadir la película del test
+                while True:
+                    r_cart = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+                    if not (r_cart.status_code == HTTPStatus.OK and r_cart.json()):
+                        break
+                    for movie in r_cart.json():
+                        requests.delete(f"{CATALOG}/cart/{movie['movieid']}", headers=headers_alice)
 
-                # Añadir la película al carrito
-                r_add = requests.put(f"{CATALOG}/cart/{movie_to_buy}", headers=headers_alice)
-                ok(f"Añadir película ID [{movie_to_buy}] al carrito para comprobar descuento", r_add.status_code == HTTPStatus.OK)
+                r_add_test = requests.put(f"{CATALOG}/cart/{movie_for_discount}", headers=headers_alice)
+                ok(f"Añadir película [{movie_for_discount}] para test sencillo de descuento", r_add_test.status_code == HTTPStatus.OK)
 
-                # Asegurar saldo suficiente y hacer checkout
-                # Añadimos un crédito lo suficientemente alto
-                r_credit = requests.post(f"{CATALOG}/user/credit", json={"amount": 1000}, headers=headers_alice)
-                ok("Aumentar saldo de alice antes del checkout", r_credit.status_code == HTTPStatus.OK)
+                r_credit_test = requests.post(f"{CATALOG}/user/credit", json={"amount": 100}, headers=headers_alice)
+                ok("Asegurar saldo antes del checkout con descuento", r_credit_test.status_code == HTTPStatus.OK)
 
-                # Realizar diagnóstico: consultar qué descuento ve el catálogo
-                rr_debug = requests.get(f"{CATALOG}/debug/user/{uid_alice}/discount")
-                if rr_debug.status_code == HTTPStatus.OK:
-                    print(f"\t[DEBUG] Discount (catalog) = {rr_debug.json().get('discount')}")
+                r_checkout_test = requests.post(f"{CATALOG}/cart/checkout", headers=headers_alice)
+                if ok("Checkout sencillo aplicando descuento", r_checkout_test.status_code == HTTPStatus.OK and r_checkout_test.json()):
+                    orderid_test = r_checkout_test.json().get("orderid")
+                    r_order_test = requests.get(f"{CATALOG}/orders/{orderid_test}", headers=headers_alice)
+                    if ok("Obtener pedido para verificar total con descuento", r_order_test.status_code == HTTPStatus.OK and r_order_test.json()):
+                        total_paid = float(r_order_test.json().get("total"))
+                        ok("Total pagado coincide con precio con descuento", round(total_paid, 2) == expected_total)
+                        print(f"\tTotal esperado: {expected_total:.2f} | Total cobrado: {total_paid:.2f}")
                 else:
-                    print(f"\t[DEBUG] Catalog returned {rr_debug.status_code} on debug discount")
-
-                # Realizar checkout
-                r_checkout = requests.post(f"{CATALOG}/cart/checkout", headers=headers_alice)
-                ok("Checkout con descuento (respuesta) ", r_checkout.status_code == HTTPStatus.OK and r_checkout.json())
-                if r_checkout.status_code == HTTPStatus.OK and r_checkout.json():
-                    orderid = r_checkout.json().get('orderid')
-                    # Recuperar detalles del pedido
-                    r_order = requests.get(f"{CATALOG}/orders/{orderid}", headers=headers_alice)
-                    ok("Obtener detalles del pedido tras checkout", r_order.status_code == HTTPStatus.OK and r_order.json())
-                    if r_order.status_code == HTTPStatus.OK and r_order.json():
-                        order = r_order.json()
-                        # Calcular precio esperado con descuento
-                        expected = round(price * (1 - (discount_value / 100.0)), 2)
-                        print(price)
-                        total_order = float(order.get('total'))
-                        ok(f"El total del pedido [{orderid}] aplica el descuento ({discount_value}%)", total_order == expected)
-                        print(total_order, expected)
+                    print("\tNo se pudo completar el checkout del test sencillo de descuento.")
+        else:
+            print("\tNo se encontró ninguna película para el test sencillo de descuento.")
 
     # Consultar descuento de alice con token ajeno (debe fallar)
     r = requests.get(f"{USERS}/user/{uid_alice}/discount", headers=headers_admin)
