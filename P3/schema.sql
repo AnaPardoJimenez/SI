@@ -99,6 +99,7 @@ CREATE TABLE Participa (
 CREATE TABLE Carrito (
     cart_id SERIAL PRIMARY KEY,
     user_id VARCHAR(37) NOT NULL,
+    total DECIMAL(10,2) DEFAULT 0.00,
     FOREIGN KEY (user_id) REFERENCES Usuario(user_id) ON DELETE CASCADE
 );
 

@@ -496,12 +496,7 @@ async def checkout(token):
     """
     params = {"order_id": order_id}
     if (await fetch_all(engine, query, params=params)) is None: return None, "UPDATE_PAID_FAILED"
-    # Actualizar el saldo del usuario
-    #if (await add_to_balance(user_id, -total)) is not True: return None, "ADD_TO_BALANCE_FAILED"
-    # Eliminar las películas del carrito
-    #if (await empty_cart(user_id)) is not True: return None, "EMPTY_CART_FAILED"
 
-    # order_id coincide con el cart_id del usuario, así que lo devolvemos directamente
     return order_id, "OK"
 
 async def get_order(order_id):
@@ -731,25 +726,6 @@ async def get_balance(user_id):
     else:
         return None
 
-async def add_to_balance(user_id, amount):
-    """
-    Suma (o resta si es negativo) una cantidad al saldo de un usuario.
-    
-    Args:
-        user_id (str): ID del usuario.
-        amount (float): Cantidad a sumar (puede ser negativa para restar).
-    
-    Returns:
-        bool: True si se actualizó correctamente, False en caso contrario
-    """
-    query = """
-        UPDATE Usuario 
-        SET balance = balance + :amount
-        WHERE user_id = :user_id
-    """
-    params = {"user_id": user_id, "amount": amount}
-    return await fetch_all(engine, query, params=params)
-
 async def get_cart_total(user_id):
     """
     Calcula el precio total de todas las películas en el carrito de un usuario.
@@ -800,47 +776,6 @@ async def get_cart_total(user_id):
         return round(float(total), 2)
     else:
         return None
-
-# async def empty_cart(user_id):
-#     """
-#     Elimina todas las películas del carrito de un usuario.
-    
-#     Args:
-#         user_id (str): ID del usuario.
-    
-#     Returns:
-#         bool: True si se vació correctamente, False en caso contrario
-#     """
-#     params = {"user_id": user_id}
-#     query = """
-#         DELETE
-#             FROM Carrito_Pelicula cp
-#                 USING Carrito c
-#             WHERE cp.cart_id = c.cart_id
-#                 AND c.user_id = :user_id
-#     """
-#     result = await fetch_all(engine, query, params=params)
-#     if result is not True:
-#         return False
-    
-#     query = """
-#         DELETE
-#             FROM Carrito c
-#             WHERE c.user_id = :user_id
-#     """
-#     params = {"user_id": user_id}
-#     result = await fetch_all(engine, query, params=params)
-#     if result is not True:
-#         return False
-
-#     query = """
-#         INSERT INTO Carrito (user_id)
-#         VALUES (:user_id)
-#     """
-#     result = await fetch_all(engine, query, params=params)
-#     if result is not True:
-#         return False
-#     return True
 
 async def get_user_id(token):
     """
