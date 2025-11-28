@@ -801,46 +801,46 @@ async def get_cart_total(user_id):
     else:
         return None
 
-async def empty_cart(user_id):
-    """
-    Elimina todas las películas del carrito de un usuario.
+# async def empty_cart(user_id):
+#     """
+#     Elimina todas las películas del carrito de un usuario.
     
-    Args:
-        user_id (str): ID del usuario.
+#     Args:
+#         user_id (str): ID del usuario.
     
-    Returns:
-        bool: True si se vació correctamente, False en caso contrario
-    """
-    params = {"user_id": user_id}
-    query = """
-        DELETE
-            FROM Carrito_Pelicula cp
-                USING Carrito c
-            WHERE cp.cart_id = c.cart_id
-                AND c.user_id = :user_id
-    """
-    result = await fetch_all(engine, query, params=params)
-    if result is not True:
-        return False
+#     Returns:
+#         bool: True si se vació correctamente, False en caso contrario
+#     """
+#     params = {"user_id": user_id}
+#     query = """
+#         DELETE
+#             FROM Carrito_Pelicula cp
+#                 USING Carrito c
+#             WHERE cp.cart_id = c.cart_id
+#                 AND c.user_id = :user_id
+#     """
+#     result = await fetch_all(engine, query, params=params)
+#     if result is not True:
+#         return False
     
-    query = """
-        DELETE
-            FROM Carrito c
-            WHERE c.user_id = :user_id
-    """
-    params = {"user_id": user_id}
-    result = await fetch_all(engine, query, params=params)
-    if result is not True:
-        return False
+#     query = """
+#         DELETE
+#             FROM Carrito c
+#             WHERE c.user_id = :user_id
+#     """
+#     params = {"user_id": user_id}
+#     result = await fetch_all(engine, query, params=params)
+#     if result is not True:
+#         return False
 
-    query = """
-        INSERT INTO Carrito (user_id)
-        VALUES (:user_id)
-    """
-    result = await fetch_all(engine, query, params=params)
-    if result is not True:
-        return False
-    return True
+#     query = """
+#         INSERT INTO Carrito (user_id)
+#         VALUES (:user_id)
+#     """
+#     result = await fetch_all(engine, query, params=params)
+#     if result is not True:
+#         return False
+#     return True
 
 async def get_user_id(token):
     """
@@ -918,6 +918,27 @@ async def add_movies_to_order(order_id):
     """
     params = {"order_id": order_id, "cart_id": order_id}
     return await fetch_all(engine, query, params=params)
+
+async def clientes_sin_pedidos():
+    """
+    Obtiene la lista de clientes que no han realizado ningún pedido.
+    
+    Returns:
+        list: Lista de clientes que no han realizado ningún pedido
+    """
+    query = """
+        SELECT user_id, name, balance
+        FROM Usuario
+        WHERE user_id NOT IN (
+            SELECT user_id
+            FROM Pedido
+        )
+    """
+    result = await fetch_all(engine, query)
+    if result:              return result, "OK"
+    elif result is False:   return False, "NOT_FOUND"
+    elif result is None:    return None, "ERROR"
+    else:                   return None, "UNKNOWN_ERROR"
 
 async def fetch_all(engine, query, params={}):
     """
@@ -1535,7 +1556,39 @@ async def http_estadistica_ventas(anio, pais):
         return jsonify({'status': 'ERROR', 'message': 'Error al obtener la estadística de ventas.'}), HTTPStatus.INTERNAL_SERVER_ERROR
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+@app.route("/clientesSinPedidos", methods=["GET"])
+async def http_clientes_sin_pedidos():
+    """
+    Endpoint HTTP para obtener la lista de clientes que no han realizado ningún pedido.
     
+    - Método: GET
+    - Path: /clientesSinPedidos
+    - Comportamiento: Llama a clientes_sin_pedidos()
+    - Respuestas esperadas:
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+
+        token = auth.split(" ", 1)[1].strip()
+        if not await user.comprobar_token_admin(token):
+            return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
+
+        result, status = await clientes_sin_pedidos()
+
+        if status == "OK":
+            return jsonify(result), HTTPStatus.OK
+        elif status == "NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'No se encontraron clientes sin pedidos.'}), HTTPStatus.NOT_FOUND
+        elif status == "ERROR":
+            return jsonify({'status': 'ERROR', 'message': 'No se pudo obtener la lista de clientes sin pedidos.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'El servidor se rehusa a preparar café porque es una tetera.'}), HTTPStatus.IM_A_TEAPOT
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
 # =============================================================================
 # PUNTO DE ENTRADA PRINCIPAL

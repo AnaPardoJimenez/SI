@@ -597,6 +597,21 @@ def main():
             print(f"\t- Pedido {order['order_id']} de usuario {order['user_name']} por {order['total']} en fecha {order['date']}")
 
     print("# =======================================================")
+    print("# Clientes sin pedidos")
+    print("# =======================================================")
+
+    r = requests.get(f"{CATALOG}/clientesSinPedidos", headers=headers_admin)
+    ok("Consultar clientes sin pedidos", r.status_code == HTTPStatus.OK)
+    if r.status_code == HTTPStatus.OK:
+        clientes = r.json()
+        print(f"\tDevolvió {len(clientes)} cliente(s) sin pedidos")
+        for cliente in clientes:
+            print(f"\t- Cliente {cliente['user_id']},  {cliente['name']}, {cliente['balance']}")
+
+    r = requests.get(f"{CATALOG}/clientesSinPedidos", headers=headers_alice)
+    ok("Consultar clientes sin pedidos con token de usuario no administrador", r.status_code == HTTPStatus.UNAUTHORIZED)
+    
+    print("# =======================================================")
     print("# Limpiar base de datos")
     print("# =======================================================")
     
