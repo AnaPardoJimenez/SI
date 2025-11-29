@@ -90,6 +90,31 @@ EXECUTE FUNCTION update_paid();
 
 
 -- ============================================================================
+-- FUNCIÓN: return_movie_id()
+-- DESCRIPCIÓN: Devuelve el ID de la película a la que se refiere el carrito.
+-- LÓGICA: Actualiza el stock de la película según la cantidad de películas que se han eliminado del carrito.
+-- ============================================================================
+FUNCTION return_movie_id(cart_id INT)
+RETURNS INT AS $$
+BEGIN
+    UPDATE Peliculas
+    SET stock = stock + (OLD.quantity - NEW.quantity)
+    WHERE movieid = OLD.movieid;
+END;
+$$ LANGUAGE plpgsql;
+
+-- TRIGGER: return_movie_id_trigger
+-- Se ejecuta después de DELETE o UPDATE OF quantity en la tabla carrito_pelicula
+-- Solo se activa cuando no hay pedido con el cart_id de la película que se ha eliminado del carrito
+CREATE TRIGGER return_movie_id_trigger
+AFTER DELETE OR UPDATE OF quantity ON carrito_pelicula cp
+FOR EACH ROW
+WHEN (SELECT COUNT(*) FROM pedido p WHERE p.order_id = OLD.cart_id) = 0
+EXECUTE FUNCTION return_movie_id(OLD.cart_id);
+
+
+
+-- ============================================================================
 -- FUNCIÓN: insert_rating()
 -- DESCRIPCIÓN: Actualiza el rating promedio de una película cuando se inserta
 --              una nueva calificación.
