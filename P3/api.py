@@ -611,15 +611,38 @@ async def rate_movie(user_id, movieid, rating):
     """
     params = {"user_id": user_id, "movieid": movieid, "rating": rating}
     await fetch_all(engine, query, params=params)
+    return "OK"
 
-    query_update = """
-        UPDATE Peliculas
-        SET rating = media_rating(:movieid)
-        WHERE movieid = :movieid
+async def calcular_media_ratings(movieid):
     """
-    params_update = {"movieid": movieid}
-    await fetch_all(engine, query_update, params=params_update)
+    Recalcula manualmente el rating promedio de una película usando el
+    procedimiento almacenado `actualizar_rating_pelicula`. Resulta útil
+    cuando se quiere forzar el recalculo desde la API sin depender del trigger.
 
+    Args:
+        movieid (int | str): ID de la película cuyo rating se quiere recalcular.
+
+    Returns:
+        str: "OK" en éxito, "BAD_REQUEST" si movieid es inválido,
+             "NOT_FOUND" si la película no existe o "ERROR" si falla la ejecución.
+    """
+    try:
+        movieid_int = int(movieid)
+    except (TypeError, ValueError):
+        return "BAD_REQUEST"
+
+    _, status = await get_movies_by_id(movieid_int)
+    if status != "OK":
+        return status
+
+    query = """
+        CALL actualizar_rating_pelicula(:movieid)
+    """
+    params = {"movieid": movieid_int}
+    result = await fetch_all(engine, query, params=params)
+
+    if result is None:
+        return "ERROR"
     return "OK"
 
 # =============================================================================
@@ -899,12 +922,14 @@ async def fetch_all(engine, query, params={}):
     """
     async with engine.connect() as conn:
         query_upper = query.strip().upper()
-        is_modification = query_upper.startswith(('INSERT', 'UPDATE', 'DELETE'))
+        is_modification = query_upper.startswith(('INSERT', 'UPDATE', 'DELETE', 'CALL'))
         
         if is_modification:
             async with conn.begin():
                 try:
                     result = await conn.execute(text(query), params)
+                    if query_upper.startswith('CALL'):
+                        return True
                     if result.rowcount > 0:
                         return True
                     elif query_upper.startswith(('DELETE')) or query_upper.startswith(('INSERT')):
@@ -1524,6 +1549,51 @@ async def http_clientes_sin_pedidos():
             return jsonify({'status': 'ERROR', 'message': 'El servidor se rehusa a preparar café porque es una tetera.'}), HTTPStatus.IM_A_TEAPOT
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@app.route("/movies/mediaRatings", methods=["POST"])
+async def media_ratings():
+    """
+    Endpoint admin para forzar el recalculo del rating promedio de una película.
+
+    - Método: POST
+    - Path: /mediaRatings
+    - Headers: Authorization: Bearer <token_admin>
+    - Body JSON requerido: {"movieid": <int>}
+    - Respuestas:
+        HTTPStatus.OK: recalculo exitoso.
+        HTTPStatus.BAD_REQUEST: token ausente, body inválido o movieid no numérico.
+        HTTPStatus.NOT_FOUND: usuario o película inexistente.
+        HTTPStatus.UNAUTHORIZED: token válido pero sin privilegios.
+        HTTPStatus.INTERNAL_SERVER_ERROR: error durante el recalculo.
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
+
+        if not await user.comprobar_token_admin(token):
+            return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
+
+        body = await request.get_json(silent=True) or {}
+        movieid = body.get("movieid")
+        if movieid is None:
+            return jsonify({'status': 'ERROR', 'message': 'Body JSON no contiene la clave "movieid"'}), HTTPStatus.BAD_REQUEST
+
+        status = await calcular_media_ratings(movieid)
+        if status == "OK":
+            return jsonify({'status': 'OK', 'message': 'Media de calificaciones calculada exitosamente.'}), HTTPStatus.OK
+        if status == "BAD_REQUEST":
+            return jsonify({'status': 'ERROR', 'message': 'El valor de "movieid" no es válido.'}), HTTPStatus.BAD_REQUEST
+        if status == "NOT_FOUND":
+            return jsonify({'status': 'ERROR', 'message': 'La película indicada no existe.'}), HTTPStatus.NOT_FOUND
+        return jsonify({'status': 'ERROR', 'message': 'No se pudo recalcular la media de calificaciones.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
 
 # =============================================================================
 # PUNTO DE ENTRADA PRINCIPAL

@@ -314,6 +314,42 @@ def main():
                 print(f"\t[{movie['movieid']}] {movie['title']}")
                 movieids.append(movie['movieid'])
 
+    # Test: Calculo de media de votaciones con procedimiento almacenado
+    target_movie = 1  # Película precargada en populate para probar el procedimiento
+    movie_before = None
+
+    r_before = requests.get(f"{CATALOG}/movies/{target_movie}", headers=headers_alice)
+    if ok(
+        f"Obtener datos previos de la película [{target_movie}] antes del procedimiento",
+        r_before.status_code == HTTPStatus.OK,
+    ):
+        movie_before = r_before.json()
+        print(
+            f"\tAntes -> Rating: {movie_before['rating']} - Votes: {movie_before['votes']}"
+        )
+
+    r = requests.post(
+        f"{CATALOG}/movies/mediaRatings",
+        headers=headers_admin,
+        json={"movieid": target_movie},
+    )
+    if ok(
+        f"Calcular medias de votaciones con procedimiento almacenado para la película [{target_movie}]",
+        r.status_code == HTTPStatus.OK,
+    ):
+        r_check = requests.get(f"{CATALOG}/movies/{target_movie}", headers=headers_alice)
+        if r_check.status_code == HTTPStatus.OK:
+            movie = r_check.json()
+            print(
+                f"\tDespués -> Rating: {movie['rating']} - Votes: {movie['votes']}"
+            )
+            if movie_before:
+                print(
+                    f"\tCambio detectado: {movie_before['rating']} -> {movie['rating']}"
+                )
+        else:
+            print("\tNo se pudo verificar la actualización del rating")
+
     # Test: Calificar películas con ratings aleatorios (0-10)
     ratings = []
     for movieid in movieids[:10]:

@@ -33,8 +33,8 @@
 -- =============================================================================
 
 INSERT INTO Usuario (user_id, name, password, token, nationality, discount, balance, admin) VALUES
-('123e4567-e89b-12d3-a456-426614174000', 'admin', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 'España', 0, 15000.00, TRUE);
--- ('123e4567-e89b-12d3-a456-426614174001', 'juan', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 'España', 0, 15000.00, FALSE);
+('123e4567-e89b-12d3-a456-426614174000', 'admin', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 'España', 0, 15000.00, TRUE),
+('123e4567-e89b-12d3-a456-426614174001', 'juan', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 'España', 0, 15000.00, FALSE);
 
 
 -- =============================================================================
@@ -273,3 +273,18 @@ INSERT INTO Participa (actor_id, movieid) VALUES
 -- ('España'),
 -- ('Reino Unido'),
 -- ('Estados Unidos');
+
+-- =============================================================================
+-- Insertar Calificaciones para la película ID 1 (Star Wars: A New Hope)
+-- =============================================================================
+-- Se insertan calificaciones de usuarios para la película con ID 1
+-- de cara a la prueba inicial del sistema de ratings mediante
+-- procedimiento almacenado al inicio del sistema
+INSERT INTO Calificacion (user_id, movieid, rating) VALUES
+('123e4567-e89b-12d3-a456-426614174001', 1, 7),
+('123e4567-e89b-12d3-a456-426614174000', 1, 9);
+
+-- Actualizar votos de la película ID 1 para reflejar las calificaciones insertadas
+UPDATE Peliculas
+SET votes = 2
+WHERE movieid = 1;

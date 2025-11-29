@@ -89,28 +89,28 @@ EXECUTE FUNCTION update_paid();
 
 
 
--- ============================================================================
--- FUNCIÓN: return_movie_id()
--- DESCRIPCIÓN: Devuelve el ID de la película a la que se refiere el carrito.
--- LÓGICA: Actualiza el stock de la película según la cantidad de películas que se han eliminado del carrito.
--- ============================================================================
-FUNCTION return_movie_id(cart_id INT)
-RETURNS INT AS $$
-BEGIN
-    UPDATE Peliculas
-    SET stock = stock + (OLD.quantity - NEW.quantity)
-    WHERE movieid = OLD.movieid;
-END;
-$$ LANGUAGE plpgsql;
+-- -- ============================================================================
+-- -- FUNCIÓN: return_movie_id()
+-- -- DESCRIPCIÓN: Devuelve el ID de la película a la que se refiere el carrito.
+-- -- LÓGICA: Actualiza el stock de la película según la cantidad de películas que se han eliminado del carrito.
+-- -- ============================================================================
+-- CREATE FUNCTION return_movie_id(cart_id INT)
+-- RETURNS INT AS $$
+-- BEGIN
+--     UPDATE Peliculas
+--     SET stock = stock + (OLD.quantity - NEW.quantity)
+--     WHERE movieid = OLD.movieid;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
--- TRIGGER: return_movie_id_trigger
--- Se ejecuta después de DELETE o UPDATE OF quantity en la tabla carrito_pelicula
--- Solo se activa cuando no hay pedido con el cart_id de la película que se ha eliminado del carrito
-CREATE TRIGGER return_movie_id_trigger
-AFTER DELETE OR UPDATE OF quantity ON carrito_pelicula cp
-FOR EACH ROW
-WHEN (SELECT COUNT(*) FROM pedido p WHERE p.order_id = OLD.cart_id) = 0
-EXECUTE FUNCTION return_movie_id(OLD.cart_id);
+-- -- TRIGGER: return_movie_id_trigger
+-- -- Se ejecuta después de DELETE o UPDATE OF quantity en la tabla carrito_pelicula
+-- -- Solo se activa cuando no hay pedido con el cart_id de la película que se ha eliminado del carrito
+-- CREATE TRIGGER return_movie_id_trigger
+-- AFTER DELETE OR UPDATE OF quantity ON carrito_pelicula
+-- FOR EACH ROW
+-- WHEN (SELECT COUNT(*) FROM pedido p WHERE p.order_id = OLD.cart_id) = 0
+-- EXECUTE FUNCTION return_movie_id(OLD.cart_id);
 
 
 
@@ -196,6 +196,35 @@ END;
 $$
 LANGUAGE plpgsql;
 
+
+-- ============================================================================
+-- PROCEDIMIENTO: actualizar_rating_pelicula(p_movieid INT)
+-- DESCRIPCIÓN: Procedimiento manual para recalcular el rating promedio de una
+--              película concreta sin depender del trigger. Calcula el promedio
+--              de todas las calificaciones registradas y actualiza el campo
+--              rating en la tabla Peliculas.
+-- PARÁMETROS:
+--   - p_movieid: ID de la película cuyo rating debe recalcularse
+-- ============================================================================
+CREATE OR REPLACE PROCEDURE actualizar_rating_pelicula(p_movieid INT)
+AS $$
+DECLARE
+    nuevo_rating DECIMAL(10,2);
+BEGIN
+    SELECT AVG(c.rating) INTO nuevo_rating
+    FROM Calificacion c
+    WHERE c.movieid = p_movieid;
+
+    IF nuevo_rating IS NULL THEN
+        nuevo_rating := 0.00;
+    END IF;
+
+    UPDATE Peliculas
+    SET rating = nuevo_rating
+    WHERE movieid = p_movieid;
+END;
+$$ 
+LANGUAGE plpgsql;
 
 -- ====================================================================================
 -- FUNCIÓN: update_total_cart()
