@@ -321,7 +321,8 @@ async def get_cart(user_id: str, movieid: int | None = None):
             p.description,
             p.year,
             p.genre,
-            p.price
+            p.price,
+            cp.quantity AS quantity
         FROM Carrito c
         JOIN Usuario u        ON u.user_id = c.user_id
         JOIN Carrito_Pelicula cp ON cp.cart_id = c.cart_id

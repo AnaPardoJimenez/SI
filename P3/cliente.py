@@ -627,8 +627,8 @@ def main():
 
     r = requests.put(f"{CATALOG}/cart/1", json={"quantity": 2}, headers=headers_alice)
     ok(f"Añadir película [1] para test sencillo de descuento", r.status_code == HTTPStatus.OK)
-    # r = requests.put(f"{CATALOG}/cart/1", headers=headers_alice)
-    # ok(f"Añadir película [1] para test sencillo de descuento", r.status_code == HTTPStatus.OK)
+    r = requests.put(f"{CATALOG}/cart/1", headers=headers_alice)
+    ok(f"Añadir película [1] para test sencillo de descuento", r.status_code == HTTPStatus.OK)
     r = requests.put(f"{CATALOG}/cart/3", headers=headers_alice)
     ok(f"Añadir película [3] para test sencillo de descuento", r.status_code == HTTPStatus.OK)
 
@@ -640,7 +640,7 @@ def main():
             for movie in data:
                 price_int = float(movie['price'])
                 print(f"\t[{movie['movieid']}] {movie['title']} - {price_int}")
-                total += price_int
+                total += price_int * movie.get('quantity', 1)
             print(f"\tTotal: {total}")
         else:
             print("\tEl carrito está vacío.")
@@ -660,7 +660,7 @@ def main():
         if data:
             for movie in data:
                 price_int = float(movie['price'])
-                total += price_int
+                total += price_int * movie.get('quantity', 1)
     
     r = requests.get(f"{CATALOG}/cart/total", headers=headers_alice)
     if ok("Obtener total del carrito", r.status_code == HTTPStatus.OK and r.json()['total'] == total):
@@ -677,7 +677,7 @@ def main():
         if data:
             for movie in data:
                 price_int = float(movie['price'])
-                total += price_int
+                total += price_int * movie.get('quantity', 1)
     
     r = requests.get(f"{CATALOG}/cart/total", headers=headers_alice)
     if ok("Obtener total del carrito", r.status_code == HTTPStatus.OK and r.json()['total'] == total):
@@ -686,6 +686,9 @@ def main():
 
     r = requests.delete(f"{CATALOG}/cart/3", headers=headers_alice)
     ok(f"Eliminar película [3] del carrito", r.status_code == HTTPStatus.OK)
+
+    r = requests.delete(f"{CATALOG}/cart/1", headers=headers_alice)
+    ok(f"Eliminar película [1] del carrito", r.status_code == HTTPStatus.OK)
 
     total = 0
     r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
