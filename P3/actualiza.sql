@@ -94,23 +94,49 @@ EXECUTE FUNCTION update_paid();
 -- DESCRIPCIÓN: Devuelve el ID de la película a la que se refiere el carrito.
 -- LÓGICA: Actualiza el stock de la película según la cantidad de películas que se han eliminado del carrito.
 -- ============================================================================
-FUNCTION return_movie_id(cart_id INT)
-RETURNS INT AS $$
+CREATE FUNCTION return_movie()
+RETURNS TRIGGER AS $$
+DECLARE
+    pedido_count INT;
 BEGIN
-    UPDATE Peliculas
-    SET stock = stock + (OLD.quantity - NEW.quantity)
-    WHERE movieid = OLD.movieid;
+    -- Verificar si existe un pedido con este cart_id
+    SELECT COUNT(*) INTO pedido_count
+    FROM pedido p
+    WHERE p.order_id = OLD.cart_id;
+    
+    -- Solo proceder si no hay pedido asociado
+    IF pedido_count = 0 THEN
+        -- En caso de DELETE, devolver el stock completo
+        IF TG_OP = 'DELETE' THEN
+            UPDATE Peliculas
+            SET stock = stock + OLD.quantity
+            WHERE movieid = OLD.movieid;
+            RETURN OLD;
+        -- En caso de UPDATE, ajustar según la diferencia
+        ELSIF TG_OP = 'UPDATE' THEN
+            UPDATE Peliculas
+            SET stock = stock + (OLD.quantity - NEW.quantity)
+            WHERE movieid = OLD.movieid;
+            RETURN NEW;
+        END IF;
+    END IF;
+    
+    -- Si hay pedido o no es DELETE/UPDATE, retornar el registro apropiado
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 
 -- TRIGGER: return_movie_id_trigger
 -- Se ejecuta después de DELETE o UPDATE OF quantity en la tabla carrito_pelicula
 -- Solo se activa cuando no hay pedido con el cart_id de la película que se ha eliminado del carrito
-CREATE TRIGGER return_movie_id_trigger
-AFTER DELETE OR UPDATE OF quantity ON carrito_pelicula cp
+CREATE TRIGGER return_movie_trigger
+AFTER DELETE OR UPDATE  OF quantity ON carrito_pelicula
 FOR EACH ROW
-WHEN (SELECT COUNT(*) FROM pedido p WHERE p.order_id = OLD.cart_id) = 0
-EXECUTE FUNCTION return_movie_id(OLD.cart_id);
+EXECUTE FUNCTION return_movie();
 
 
 
@@ -207,12 +233,27 @@ LANGUAGE plpgsql;
 CREATE FUNCTION update_total_cart()
 RETURNS TRIGGER AS $$
 BEGIN
-    UPDATE Carrito
-    SET total = (SELECT SUM(p.price * cp.quantity)
-                    FROM Carrito_Pelicula cp
-                    JOIN Peliculas p ON cp.movieid = p.movieid
-                    WHERE cp.cart_id = NEW.cart_id)
-    WHERE cart_id = NEW.cart_id;
+
+    IF TG_OP = 'UPDATE' OR TG_OP = 'INSERT' THEN
+        UPDATE Carrito
+        SET total = (SELECT SUM(p.price * cp.quantity)
+                        FROM Carrito_Pelicula cp
+                        JOIN Peliculas p ON cp.movieid = p.movieid
+                        WHERE cp.cart_id = NEW.cart_id)
+        -- SET total = total + (SELECT p.price * (NEW.quantity - OLD.quantity)
+        --                         FROM Peliculas p
+        --                         WHERE p.movieid = NEW.movieid)
+        WHERE cart_id = NEW.cart_id;
+
+    ELSIF TG_OP = 'DELETE' THEN
+        UPDATE Carrito
+        SET total = total - (SELECT p.price * OLD.quantity
+                                FROM Peliculas p
+                                WHERE p.movieid = OLD.movieid)
+        WHERE cart_id = OLD.cart_id;
+        RETURN OLD;
+    END IF;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -221,6 +262,34 @@ $$ LANGUAGE plpgsql;
 -- Se ejecuta después de INSERT o UPDATE en la tabla carrito_pelicula
 -- Actualiza el total del carrito según el contenido de la tabla carrito_pelicula
 CREATE TRIGGER update_total_cart_trigger
-AFTER INSERT OR UPDATE ON carrito_pelicula
+AFTER INSERT OR UPDATE OR DELETE ON carrito_pelicula
 FOR EACH ROW
 EXECUTE FUNCTION update_total_cart();
+
+
+-- ====================================================================================
+-- FUNCIÓN: update_total_cart()
+-- DESCRIPCIÓN: Actualiza el total del carrito según el contenido de la tabla carrito_pelicula.
+-- PARÁMETROS:
+--   - NEW: Registro recién insertado o modificado en la tabla carrito_pelicula
+-- RETORNA: Decimal(10,2) - El total del carrito
+-- ============================================================================
+CREATE FUNCTION update_total_cart_onDelete()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE Carrito
+    SET total = total - (SELECT p.price * OLD.quantity
+                            FROM Peliculas p
+                            WHERE p.movieid = OLD.movieid)
+    WHERE cart_id = OLD.cart_id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- TRIGGER: update_total_cart_trigger
+-- Se ejecuta después de INSERT o UPDATE en la tabla carrito_pelicula
+-- Actualiza el total del carrito según el contenido de la tabla carrito_pelicula
+CREATE TRIGGER update_total_cart_onDelete_trigger
+AFTER DELETE ON carrito_pelicula
+FOR EACH ROW
+EXECUTE FUNCTION update_total_cart_onDelete();

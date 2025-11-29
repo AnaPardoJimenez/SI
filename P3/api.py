@@ -1177,6 +1177,41 @@ async def http_get_cart():
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
+
+@app.route("/cart/total", methods=["GET"])
+async def http_get_cart_total():
+    """
+    Endpoint HTTP para obtener el carrito del usuario autenticado.
+    
+    - Método: GET
+    - Path: /cart
+    - Comportamiento: Llama a get_cart_total(user_id)
+    - Respuestas esperadas:
+        HTTPStatus.OK: <carrito> - Carrito encontrado (vacío si no hay items)
+        HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "..."} - Carrito no encontrado
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Falta Authorization
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+
+        if not (user_id := await get_user_id(token)):
+            return None, "USER_NOT_FOUND"
+        
+        data = await get_cart_total(user_id)
+        if data is not None:
+            return jsonify({'total': data}), HTTPStatus.OK
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'No se encontró el carrito.'}), HTTPStatus.NOT_FOUND
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+
 @app.route("/cart/<int:movieid>", methods=["PUT"])
 async def http_add_to_cart(movieid):
     """

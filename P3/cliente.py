@@ -610,7 +610,94 @@ def main():
 
     r = requests.get(f"{CATALOG}/clientesSinPedidos", headers=headers_alice)
     ok("Consultar clientes sin pedidos con token de usuario no administrador", r.status_code == HTTPStatus.UNAUTHORIZED)
+
+    print("# =======================================================")
+    print("# Comprobaciones del precio del carrito ")
+    print("# =======================================================")
+
+    r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+    if ok("Obtener carrito", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        if data:
+            for movie in data:
+                print(f"\t[{movie['movieid']}] {movie['title']} - {movie['price']}")
+        else:
+            print(f"\tEl carrito está vacío. Carrito: {data}")
+    else: print(r)
+
+    r = requests.put(f"{CATALOG}/cart/1", json={"quantity": 2}, headers=headers_alice)
+    ok(f"Añadir película [1] para test sencillo de descuento", r.status_code == HTTPStatus.OK)
+    # r = requests.put(f"{CATALOG}/cart/1", headers=headers_alice)
+    # ok(f"Añadir película [1] para test sencillo de descuento", r.status_code == HTTPStatus.OK)
+    r = requests.put(f"{CATALOG}/cart/3", headers=headers_alice)
+    ok(f"Añadir película [3] para test sencillo de descuento", r.status_code == HTTPStatus.OK)
+
+    total = 0
+    r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+    if ok("Obtener carrito", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        if data:
+            for movie in data:
+                price_int = float(movie['price'])
+                print(f"\t[{movie['movieid']}] {movie['title']} - {price_int}")
+                total += price_int
+            print(f"\tTotal: {total}")
+        else:
+            print("\tEl carrito está vacío.")
+
+    r = requests.get(f"{CATALOG}/cart/total", headers=headers_alice)
+    if ok("Obtener total del carrito", r.status_code == HTTPStatus.OK and r.json()['total'] == total):
+        data = r.json()
+        print(f"\t✓ Total del carrito: {data['total']}")
+
+    r = requests.delete(f"{CATALOG}/cart/1", headers=headers_alice)
+    ok(f"Eliminar película [1] del carrito", r.status_code == HTTPStatus.OK)
+
+    total = 0
+    r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+    if ok("Obtener carrito", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        if data:
+            for movie in data:
+                price_int = float(movie['price'])
+                total += price_int
     
+    r = requests.get(f"{CATALOG}/cart/total", headers=headers_alice)
+    if ok("Obtener total del carrito", r.status_code == HTTPStatus.OK and r.json()['total'] == total):
+        data = r.json()
+        print(f"\t✓ Total del carrito: {data['total']}")
+
+    r = requests.delete(f"{CATALOG}/cart/1", headers=headers_alice)
+    ok(f"Eliminar película [1] del carrito", r.status_code == HTTPStatus.OK)
+
+    total = 0
+    r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+    if ok("Obtener carrito", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        if data:
+            for movie in data:
+                price_int = float(movie['price'])
+                total += price_int
+    
+    r = requests.get(f"{CATALOG}/cart/total", headers=headers_alice)
+    if ok("Obtener total del carrito", r.status_code == HTTPStatus.OK and r.json()['total'] == total):
+        data = r.json()
+        print(f"\t✓ Total del carrito: {data['total']}")
+
+    r = requests.delete(f"{CATALOG}/cart/3", headers=headers_alice)
+    ok(f"Eliminar película [3] del carrito", r.status_code == HTTPStatus.OK)
+
+    total = 0
+    r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+    if ok("Obtener carrito", r.status_code == HTTPStatus.OK):
+        data = r.json()
+        print(f"\tEl carrito está vacío. Carrito: {data}")
+    
+    r = requests.get(f"{CATALOG}/cart/total", headers=headers_alice)
+    if ok("Obtener total del carrito", r.status_code == HTTPStatus.OK and r.json()['total'] == total):
+        data = r.json()
+        print(f"\t✓ Total del carrito: {data['total']}")
+
     print("# =======================================================")
     print("# Limpiar base de datos")
     print("# =======================================================")
