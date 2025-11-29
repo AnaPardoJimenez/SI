@@ -103,11 +103,7 @@ docker volume prune
 # Paso 3: Eliminar imagen base Python (prueba completa)
 # sudo docker rmi python:3.12
 
-# Paso 4: Limpiar archivos generados por tests
-rm -f resources/users.txt
-rm -f resources/files/*.txt
-
-# Paso 4.5: Comprobar que todo está limpio
+# Paso 4: Comprobar que todo está limpio
 docker ps -a
 docker images
 docker network ls
