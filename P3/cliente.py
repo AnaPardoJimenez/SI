@@ -193,6 +193,13 @@ def main():
     print("# Gestión del carrito de alice")
     print("# =======================================================")
 
+    final_stock = 0
+    r = requests.get(f"{CATALOG}/movies", headers=headers_admin)
+    if ok("Obtener catálogo de películas", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        if data:
+            for movie in data: final_stock += movie['stock']
+
     # Aumentar el saldo de alice
     r = requests.post(f"{CATALOG}/user/credit", json={"amount": -1}, headers=headers_alice)
     if ok("Aumentar el saldo de alice", r.status_code == HTTPStatus.OK and r.json()):
@@ -208,8 +215,8 @@ def main():
                 data = r.json()
                 if data:
                     for movie in data:
-                        print(f"\t[{movie['movieid']}] {movie['title']} - {movie['price']}")
-            
+                        print(f"\t{movie['quantity']} [id: {movie['movieid']}] {movie['title']} - {movie['price']}")
+
     # Añadir película al carrito más de una vez (incrementa cantidad)
     if movieids:
         extra_quantity = 2
@@ -218,13 +225,27 @@ def main():
         r = requests.put(f"{CATALOG}/cart/{movieids[0]}", json={"quantity": extra_quantity}, headers=headers_alice)
         ok(f"Añadir {extra_quantity} unidades extra de la película con ID [{movieids[0]}] al carrito", r.status_code == HTTPStatus.OK)
 
+        r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+        if ok("Obtener carrito del usuario con el nuevo contenido", r.status_code == HTTPStatus.OK and r.json()):
+            data = r.json()
+            if data:
+                for movie in data:
+                    print(f"\t{movie['quantity']} [id: {movie['movieid']}] {movie['title']} - {movie['price']}")
+    
         # Intentar borrar más unidades de las que hay debe fallar
         r = requests.delete(f"{CATALOG}/cart/{movieids[0]}", json={"quantity": total_quantity + 1}, headers=headers_alice)
         ok("Intentar eliminar más unidades de las existentes en el carrito", r.status_code == HTTPStatus.CONFLICT)
 
+        r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
+        if ok("Obtener carrito del usuario con el nuevo contenido", r.status_code == HTTPStatus.OK and r.json()):
+            data = r.json()
+            if data:
+                for movie in data:
+                    print(f"\t{movie['quantity']} [id: {movie['movieid']}] {movie['title']} - {movie['price']}")
+
         # Eliminar todas las unidades añadidas de esa película
         r = requests.delete(f"{CATALOG}/cart/{movieids[0]}", json={"quantity": total_quantity}, headers=headers_alice)
-        if ok(f"Eliminar la película con ID [{movieids[0]}] del carrito usando quantity", r.status_code == HTTPStatus.OK):
+        if ok(f"Eliminar la película con ID [{movieids[0]}] del carrito usando quantity: {total_quantity}", r.status_code == HTTPStatus.OK):
             r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
             if ok(f"Obtener carrito del usuario sin la película [{movieids[0]}]", r.status_code == HTTPStatus.OK):
                 data = r.json()
@@ -232,7 +253,7 @@ def main():
                 ok("La película eliminada ya no está en el carrito", movieids[0] not in remaining_ids)
                 if data:
                     for movie in data:
-                        print(f"\t[{movie['movieid']}] {movie['title']} - {movie['price']}")
+                        print(f"\t{movie['quantity']} [id: {movie['movieid']}] {movie['title']} - {movie['price']}")
                 else:
                     print("\tEl carrito está vacío.")
 
@@ -257,14 +278,16 @@ def main():
         if ok(f"Recuperar datos del pedido {data['orderid']}", r.status_code == HTTPStatus.OK and r.json()):
             order = r.json()
             print(f"\tFecha: {order['date']}\n\tPrecio: {order['total']}")
-            print("\tContenidos:")
+            print(f"\tContenido - {len(order['movies'])} pelicula(s):")
             for movie in order['movies']:
-                    print(f"\t- [{movie['movieid']}] {movie['title']} ({movie['price']})")
+                    print(f"\t- {movie['quantity']} [id: {movie['movieid']}] {movie['title']} ({movie['price']})")
+                    final_stock -= movie['quantity']
         
 
         # Test: Verificar que el carrito está vacío después del checkout
         r = requests.get(f"{CATALOG}/cart", headers=headers_alice)
         ok("Obtener carrito vacío después de la venta", r.status_code == HTTPStatus.OK and not r.json())
+
 
     print("# =======================================================")
     print("# Pruebas de creación/actualización/eliminación de películas")
@@ -507,11 +530,19 @@ def main():
                 r_checkout_test = requests.post(f"{CATALOG}/cart/checkout", headers=headers_alice)
                 if ok("Checkout sencillo aplicando descuento", r_checkout_test.status_code == HTTPStatus.OK and r_checkout_test.json()):
                     orderid_test = r_checkout_test.json().get("orderid")
+
                     r_order_test = requests.get(f"{CATALOG}/orders/{orderid_test}", headers=headers_alice)
                     if ok("Obtener pedido para verificar total con descuento", r_order_test.status_code == HTTPStatus.OK and r_order_test.json()):
+                        content = r_order_test.json().get("movies")
+                        print(f"\tContenido - {len(content)} pelicula(s)")
+                        for movie in content:
+                            print(f"\t- {movie['quantity']} [id: {movie['movieid']}] {movie['title']} ({movie['price']})")
+                            final_stock -= movie['quantity']
+
                         total_paid = float(r_order_test.json().get("total"))
                         ok("Total pagado coincide con precio con descuento", round(total_paid, 2) == expected_total)
                         print(f"\tTotal esperado: {expected_total:.2f} | Total cobrado: {total_paid:.2f}")
+
                 else:
                     print("\tNo se pudo completar el checkout del test sencillo de descuento.")
         else:
@@ -584,7 +615,15 @@ def main():
             requests.post(f"{CATALOG}/user/credit", json={"amount": 100}, headers=headers_bob)
             requests.put(f"{CATALOG}/cart/{movie_to_buy}", headers=headers_bob)
             r_checkout = requests.post(f"{CATALOG}/cart/checkout", headers=headers_bob)
-            ok("Checkout de bob", r_checkout.status_code == HTTPStatus.OK)
+            if ok("Checkout de bob", r_checkout.status_code == HTTPStatus.OK):
+                orderid = r_checkout.json().get("orderid")
+                r_order = requests.get(f"{CATALOG}/orders/{orderid}", headers=headers_bob)
+                if ok("Obtener pedido", r_order.status_code == HTTPStatus.OK and r_order.json()):
+                    content = r_order.json().get("movies")
+                    print(f"\tContenido - {len(content)} pelicula(s)")
+                    for movie in content:
+                        print(f"\t- {movie['quantity']} [id: {movie['movieid']}] {movie['title']} ({movie['price']})")
+                        final_stock -= movie['quantity']
 
     year_param = datetime.now().year
     country_param = pais_alice
@@ -620,7 +659,7 @@ def main():
         data = r.json()
         if data:
             for movie in data:
-                print(f"\t[{movie['movieid']}] {movie['title']} - {movie['price']}")
+                print(f"\t{movie['quantity']} [id: {movie['movieid']}] {movie['title']} - {movie['price']}")
         else:
             print(f"\tEl carrito está vacío. Carrito: {data}")
     else: print(r)
@@ -700,6 +739,19 @@ def main():
     if ok("Obtener total del carrito", r.status_code == HTTPStatus.OK and r.json()['total'] == total):
         data = r.json()
         print(f"\t✓ Total del carrito: {data['total']}")
+
+    print("# =======================================================")
+    print("# Comprobar total de stock correcto")
+    print("# =======================================================")
+
+    total_stock = 0
+    r = requests.get(f"{CATALOG}/movies", headers=headers_admin)
+    if ok("Obtener catálogo de películas", r.status_code == HTTPStatus.OK and r.json()):
+        data = r.json()
+        if data:
+            for movie in data: total_stock += movie['stock']
+            if not ok(f"Total de stock coincide con el catálogo: {final_stock} ?= {total_stock}", total_stock == final_stock):
+                print(f"\tTotal de stock: {total_stock} != {final_stock}")
 
     print("# =======================================================")
     print("# Limpiar base de datos")

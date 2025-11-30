@@ -16,31 +16,90 @@
 --   - INSERT: Reduce el stock (quantity negativo)
 --   - UPDATE: Ajusta el stock según la diferencia entre cantidad antigua y nueva
 -- ============================================================================
-CREATE OR REPLACE FUNCTION update_stock()
+-- CREATE OR REPLACE FUNCTION update_stock()
+-- RETURNS TRIGGER AS $$
+-- DECLARE
+--     quantity INT;
+-- BEGIN
+--     IF TG_OP = 'INSERT' THEN
+--         quantity := -NEW.quantity;
+--     ELSIF TG_OP = 'UPDATE' THEN
+--         quantity := OLD.quantity - NEW.quantity;
+--     END IF;
+
+--     UPDATE Peliculas
+--     SET stock = stock + quantity
+--     WHERE movieid = NEW.movieid;
+--     RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql;
+
+-- -- TRIGGER: update_stock_trigger
+-- -- Se ejecuta después de INSERT o UPDATE en la tabla carrito_pelicula
+-- -- Mantiene el stock de películas sincronizado con el contenido del carrito
+-- CREATE TRIGGER update_stock_trigger
+-- AFTER INSERT OR UPDATE OR DELETE ON carrito_pelicula
+-- FOR EACH ROW
+-- EXECUTE FUNCTION update_stock();
+
+
+
+-- ============================================================================
+-- FUNCIÓN: return_movie_id()
+-- DESCRIPCIÓN: Devuelve el ID de la película a la que se refiere el carrito.
+-- LÓGICA: Actualiza el stock de la película según la cantidad de películas que se han eliminado del carrito.
+-- ============================================================================
+CREATE FUNCTION return_movie()
 RETURNS TRIGGER AS $$
 DECLARE
-    quantity INT;
+    pedido_count INT;
 BEGIN
-    IF TG_OP = 'INSERT' THEN
-        quantity := -NEW.quantity;
-    ELSIF TG_OP = 'UPDATE' THEN
-        quantity := OLD.quantity - NEW.quantity;
+    -- Verificar si existe un pedido con este cart_id
+    SELECT COUNT(*) INTO pedido_count
+    FROM pedido p
+    WHERE p.order_id = OLD.cart_id;
+    
+    -- Solo proceder si no hay pedido asociado
+    IF pedido_count = 0 THEN
+        -- DELETE, devolver el stock completo
+        IF TG_OP = 'DELETE' THEN
+            UPDATE Peliculas
+            SET stock = stock + OLD.quantity
+            WHERE movieid = OLD.movieid;
+            RETURN OLD;
+        
+        -- UPDATE, ajustar según la diferencia
+        ELSIF TG_OP = 'UPDATE' THEN
+            UPDATE Peliculas
+            SET stock = stock + (OLD.quantity - NEW.quantity)
+            WHERE movieid = OLD.movieid;
+            RETURN NEW;
+        
+        -- INSERT, reducir el stock completo
+        ELSIF TG_OP = 'INSERT' THEN
+            UPDATE Peliculas
+            SET stock = stock - NEW.quantity
+            WHERE movieid = NEW.movieid;
+            RETURN NEW;
+        END IF;
     END IF;
-
-    UPDATE Peliculas
-    SET stock = stock + quantity
-    WHERE movieid = NEW.movieid;
-    RETURN NEW;
+    
+    -- Si hay pedido o no es DELETE/UPDATE/INSERT, retornar el registro apropiado
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 
--- TRIGGER: update_stock_trigger
--- Se ejecuta después de INSERT o UPDATE en la tabla carrito_pelicula
--- Mantiene el stock de películas sincronizado con el contenido del carrito
-CREATE TRIGGER update_stock_trigger
-AFTER INSERT OR UPDATE OR DELETE ON carrito_pelicula
+-- TRIGGER: return_movie_id_trigger
+-- Se ejecuta después de DELETE o UPDATE OF quantity en la tabla carrito_pelicula
+-- Solo se activa cuando no hay pedido con el cart_id de la película que se ha eliminado del carrito
+CREATE TRIGGER return_movie_trigger
+AFTER DELETE OR UPDATE OF quantity OR INSERT ON carrito_pelicula
 FOR EACH ROW
-EXECUTE FUNCTION update_stock();
+EXECUTE FUNCTION return_movie();
 
 
 
@@ -86,57 +145,6 @@ AFTER UPDATE OF paid ON pedido
 FOR EACH ROW
 WHEN (NEW.paid = TRUE)
 EXECUTE FUNCTION update_paid();
-
-
-
--- ============================================================================
--- FUNCIÓN: return_movie_id()
--- DESCRIPCIÓN: Devuelve el ID de la película a la que se refiere el carrito.
--- LÓGICA: Actualiza el stock de la película según la cantidad de películas que se han eliminado del carrito.
--- ============================================================================
-CREATE FUNCTION return_movie()
-RETURNS TRIGGER AS $$
-DECLARE
-    pedido_count INT;
-BEGIN
-    -- Verificar si existe un pedido con este cart_id
-    SELECT COUNT(*) INTO pedido_count
-    FROM pedido p
-    WHERE p.order_id = OLD.cart_id;
-    
-    -- Solo proceder si no hay pedido asociado
-    IF pedido_count = 0 THEN
-        -- En caso de DELETE, devolver el stock completo
-        IF TG_OP = 'DELETE' THEN
-            UPDATE Peliculas
-            SET stock = stock + OLD.quantity
-            WHERE movieid = OLD.movieid;
-            RETURN OLD;
-        -- En caso de UPDATE, ajustar según la diferencia
-        ELSIF TG_OP = 'UPDATE' THEN
-            UPDATE Peliculas
-            SET stock = stock + (OLD.quantity - NEW.quantity)
-            WHERE movieid = OLD.movieid;
-            RETURN NEW;
-        END IF;
-    END IF;
-    
-    -- Si hay pedido o no es DELETE/UPDATE, retornar el registro apropiado
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    ELSE
-        RETURN NEW;
-    END IF;
-END;
-$$ LANGUAGE plpgsql;
-
--- TRIGGER: return_movie_id_trigger
--- Se ejecuta después de DELETE o UPDATE OF quantity en la tabla carrito_pelicula
--- Solo se activa cuando no hay pedido con el cart_id de la película que se ha eliminado del carrito
-CREATE TRIGGER return_movie_trigger
-AFTER DELETE OR UPDATE  OF quantity ON carrito_pelicula
-FOR EACH ROW
-EXECUTE FUNCTION return_movie();
 
 
 
