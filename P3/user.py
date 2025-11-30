@@ -205,7 +205,6 @@ async def create_user(username, password, nationality):
     """
     # Si el usuario ya existe, hacer login en su lugar
     uid, error_code = await get_user_id(username)
-    print(uid, error_code)
     if error_code == 'OK':
         return None, False  # No se creó, ya existía
     
@@ -342,17 +341,13 @@ async def delete_user(uid: str):
     query = "SELECT admin FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
     data = await fetch_all(engine, query, params)
-    print(f"345 - {data}")
     if data and len(data) > 0:
-        print("347 ", len(data))
         if data[0]["admin"]:
             return False, "FORBIDDEN"
 
     # Verificar si el usuario existe y esta activo (si no esta activo es como si no existiera)
     active, status = await user_exists(uid)
-    print(f"353 - {active}, {status}")
     if status != "OK" or not active:
-        print(f"355")
         return False, "NOT_FOUND"
 
     # Comprobar si el carrito del usuario tiene películas
@@ -364,11 +359,9 @@ async def delete_user(uid: str):
             """
     params = {"uid": uid}
     data = await fetch_all(engine, query, params)
-    print(f"367 - {data}")
 
     # Si el carrito no está vacío, no se puede eliminar el usuario
     if data and data[0]["movie_count"] > 0:
-        print(f"370")
         return False, "NOT_EMPTY_CART"
     
     # Comprobar si el usuario ha realizado pedidos
@@ -379,22 +372,18 @@ async def delete_user(uid: str):
             """
     params = {"uid": uid}
     data = await fetch_all(engine, query, params)
-    print(f"382 - {data}")
 
     if data and data[0]["order_count"] > 0:
-        print(f"385")
         # Si ha realizado pedidos, marcar como inactivo en lugar de eliminar
         query = "UPDATE Usuario SET active = FALSE WHERE user_id LIKE :uid"
         params = {"uid": uid}
         await fetch_all(engine, query, params)
-        print(f"390")
         return True, "OK"
 
     # Eliminar usuario de la base de datos
     query = "DELETE FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
     await fetch_all(engine, query, params)
-    print(f"397")
 
     return True, "OK"
 
