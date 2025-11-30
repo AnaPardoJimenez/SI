@@ -133,3 +133,10 @@ FROM carrito
 JOIN Pertenece ON Carrito.order_id = Pertenece.order_id
 JOIN Peliculas ON Pertenece.movie_id = Peliculas.movie_id
 WHERE Carrito.user_id = '123e4567-e89b-12d3-a456-426614174000';
+
+
+SELECT SUM(stock) FROM Peliculas;
+SELECT * FROM Carrito;
+SELECT * FROM Carrito_Pelicula;
+SELECT * FROM Pedido;
+SELECT * FROM Pedido_Pelicula;

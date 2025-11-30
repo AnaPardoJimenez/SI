@@ -375,7 +375,8 @@ async def get_cart(user_id: str, movieid: int | None = None):
             p.description,
             p.year,
             p.genre,
-            p.price
+            p.price,
+            cp.quantity AS quantity
         FROM Carrito c
         JOIN Usuario u        ON u.user_id = c.user_id
         JOIN Carrito_Pelicula cp ON cp.cart_id = c.cart_id
@@ -390,6 +391,7 @@ async def get_cart(user_id: str, movieid: int | None = None):
         return None, "CART_EMPTY"
     elif data is None:
         return None, "ERROR"
+
     # Si te pasan movieid, lo quitas SOLO del resultado (no de la BBDD)
     if movieid is not None:
         data = [row for row in data if row.get("movieid") != movieid]
@@ -446,7 +448,7 @@ async def add_to_cart(user_id, movieid, quantity=1):
                 FROM Carrito c WHERE c.user_id = :user_id
                 ON CONFLICT DO NOTHING
             """
-    
+        
     params = {"user_id": user_id, "movieid": movieid, "quantity": quantity}
     ret = await fetch_all(engine, query, params)
     if ret is True:
@@ -583,7 +585,7 @@ async def get_order(order_id):
     # Obtener las películas del pedido
 
     query_movies = """
-        SELECT m.movieid, m.title, m.price 
+        SELECT m.movieid, m.title, m.price, pm.quantity
         FROM Peliculas m
         JOIN Pedido_Pelicula pm ON m.movieid = pm.movieid
         WHERE pm.order_id = :order_id
@@ -594,7 +596,8 @@ async def get_order(order_id):
         {
             'movieid': movie.get('movieid'),
             'title': movie.get('title'),
-            'price': movie.get('price')
+            'price': movie.get('price'),
+            'quantity': movie.get('quantity')
         }
         for movie in movies_data
     ] if movies_data else []
@@ -1257,6 +1260,41 @@ async def http_get_cart():
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
+
+@app.route("/cart/total", methods=["GET"])
+async def http_get_cart_total():
+    """
+    Endpoint HTTP para obtener el carrito del usuario autenticado.
+    
+    - Método: GET
+    - Path: /cart
+    - Comportamiento: Llama a get_cart_total(user_id)
+    - Respuestas esperadas:
+        HTTPStatus.OK: <carrito> - Carrito encontrado (vacío si no hay items)
+        HTTPStatus.NOT_FOUND: {"status":"ERROR", "message": "..."} - Carrito no encontrado
+        HTTPStatus.BAD_REQUEST: {"status":"ERROR", "message": "..."} - Falta Authorization
+        HTTPStatus.INTERNAL_SERVER_ERROR: {"status":"ERROR", "message": "..."} - Error interno
+    """
+    try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
+        
+        token = auth.split(" ", 1)[1].strip()
+
+        if not (user_id := await get_user_id(token)):
+            return None, "USER_NOT_FOUND"
+        
+        data = await get_cart_total(user_id)
+        if data is not None:
+            return jsonify({'total': data}), HTTPStatus.OK
+        else:
+            return jsonify({'status': 'ERROR', 'message': 'No se encontró el carrito.'}), HTTPStatus.NOT_FOUND
+    except Exception as exc:
+        return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+
 @app.route("/cart/<int:movieid>", methods=["PUT"])
 async def http_add_to_cart(movieid):
     """
@@ -1303,6 +1341,8 @@ async def http_add_to_cart(movieid):
             return jsonify({'status': 'ERROR', 'message': 'No se pudo añadir la película al carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
     except Exception as exc:
         return jsonify({'status': 'ERROR', 'message': str(exc)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+
 
 @app.route("/cart/<int:movieid>", methods=["DELETE"])
 async def http_delete_from_cart(movieid):
