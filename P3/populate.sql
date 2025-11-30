@@ -32,9 +32,9 @@
 -- Saldo inicial: 15000.00
 -- =============================================================================
 
-INSERT INTO Usuario (user_id, name, password, token, nationality, discount, balance, admin) VALUES
-('123e4567-e89b-12d3-a456-426614174000', 'admin', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 'España', 0, 15000.00, TRUE),
-('123e4567-e89b-12d3-a456-426614174001', 'juan', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 'España', 0, 15000.00, FALSE);
+INSERT INTO Usuario (user_id, name, password, token, nationality, discount, balance, admin, active) VALUES
+('123e4567-e89b-12d3-a456-426614174000', 'admin', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 'España', 0, 15000.00, TRUE, TRUE),
+('123e4567-e89b-12d3-a456-426614174001', 'juan', 'be36316a288a721dfe60768ea309880006cb8c980129869fb21128cb0702ac9929dc5a9dd1fec590785f6c6cb60821fa2a92cd37395f18e87f06c07406544f84', 'f8a7b6c5-d4e3-2f10-9e8d-7c6b5a493827', 'España', 0, 15000.00, FALSE, TRUE);
 
 
 -- =============================================================================

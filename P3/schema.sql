@@ -35,7 +35,8 @@ CREATE TABLE Usuario (
     nationality VARCHAR(255),
     discount INT DEFAULT 0,
     balance DECIMAL(10,2) DEFAULT 0.00,
-    admin BOOLEAN DEFAULT FALSE
+    admin BOOLEAN DEFAULT FALSE, 
+    active BOOLEAN DEFAULT TRUE
 );
 
 -- =============================================================================
@@ -61,7 +62,8 @@ CREATE TABLE Peliculas (
     price DECIMAL(10,2),
     rating DECIMAL(10,2),
     stock INT DEFAULT 0,
-    votes INT DEFAULT 0
+    votes INT DEFAULT 0,
+    disponible BOOLEAN DEFAULT TRUE
 );
 
 -- =============================================================================

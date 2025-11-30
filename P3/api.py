@@ -68,6 +68,8 @@ async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession
 # FUNCIONES DE GESTIÓN DE CATÁLOGO
 # =============================================================================
 
+# TODO: Añadir que si la pelicula esta creada (y disponible), se aumente el stock en vez de
+# crear una nueva entrada
 async def add_movie(movie_data: dict):
     """
     Añade una película al catálogo con los campos mínimos requeridos.
@@ -119,6 +121,9 @@ async def update_movie(movieid: int, movie_data: dict):
             - status (str): "OK" en éxito, "BAD_REQUEST" si no hay datos válidos,
               "NOT_FOUND" si no existe la película, "ERROR" en caso de fallo.
     """
+    if not await check_movie(movieid):
+        return False, "NOT_FOUND"
+    
     if not movie_data:
         return False, "BAD_REQUEST"  # No se proporcionaron datos para actualizar
 
@@ -150,6 +155,53 @@ async def remove_movie(movieid: int):
             - success (bool): True si la eliminación se ejecutó sin errores.
             - status (str): "OK" en caso de éxito, "ERROR" si falla la operación.
     """
+    # NOTE: en lugar de borrar las películas poner su stock a 0 para que no se puedan comprar
+    # añadimos un bool de no disponible el cual debe comprobarse al intentar añadir al carrito
+    # getearla, modificarla, etc. Si la peli no esta en ninguna orden se puede borrar completamente
+    # y no cambiar el bool, si no bool a no disponible
+    # hay que comprobar que no este en ningun carrito antes si no --> mensaje error
+    
+    # Comprobar si la película existe y está disponible
+    if not await check_movie(movieid):
+        return False, "ERROR"
+    
+    # Comprobar si la película está en algún carrito
+    query = """
+        SELECT COUNT(*) AS count
+        FROM Carrito_Pelicula cp
+        JOIN Carrito c ON cp.cart_id = c.cart_id
+        WHERE cp.movieid = :movieid
+        """
+    params = {"movieid": movieid}
+    result = await fetch_all(engine, query, params=params)
+
+    if result and result[0]["count"] > 0:
+        return False, "FORBIDDEN"  # La película está en algún carrito
+
+    # Comprobar si la película está en algún pedido
+    query = """
+        SELECT COUNT(*) AS count
+        FROM Pedido_Pelicula pp
+        WHERE pp.movieid = :movieid
+        """
+    params = {"movieid": movieid}
+    result = await fetch_all(engine, query, params=params)
+
+    if result and result[0]["count"] > 0:
+        # Si la película está en algún pedido, marcar como no disponible y stock a 0
+        query = """
+            UPDATE Peliculas
+            SET disponible = FALSE, stock = 0
+            WHERE movieid = :movieid
+        """
+        params = {"movieid": movieid}
+        result = await fetch_all(engine, query, params=params)
+        if result is True:
+            return True, "OK"
+        elif result is False:
+            return False, "NOT_FOUND"
+        return False, "ERROR"
+
     query = """
         DELETE FROM Peliculas
         WHERE movieid = :movieid
@@ -203,7 +255,7 @@ async def get_movies(params: dict = None):
                 FROM Peliculas p
                     JOIN Participa pa ON p.movieid = pa.movieid
                     JOIN Actores a ON a.actor_id = pa.actor_id
-            WHERE a.name = ANY(:actor_names)
+            WHERE a.name = ANY(:actor_names) AND p.disponible = TRUE
             GROUP BY p.movieid, p.title, p.description, p.year, p.genre, p.price
             HAVING COUNT(DISTINCT a.name) = CARDINALITY(:actor_names)
         """
@@ -247,6 +299,8 @@ async def get_movies(params: dict = None):
 
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
+
+    query += " AND p.disponible = TRUE" if conditions else " WHERE p.disponible = TRUE"
     
     if "N" in params and params["N"]:
         try:
@@ -276,7 +330,7 @@ async def get_movies_by_id(movieid):
             - data: Diccionario con información de la película o None
             - status: "OK", "NOT_FOUND", o "ERROR"
     """
-    query = "SELECT * FROM Peliculas WHERE movieid = :movieid"
+    query = "SELECT * FROM Peliculas WHERE movieid = :movieid AND disponible = TRUE"
     params = {"movieid": movieid}
 
     data = (await fetch_all(engine, query, params))
@@ -383,6 +437,9 @@ async def add_to_cart(user_id, movieid, quantity=1):
             return "NOT_FOUND"
         return "ERROR"
         
+    if not await check_movie(movieid):
+        return "NOT_FOUND"
+    
     query = """
                 INSERT INTO Carrito_Pelicula (cart_id, movieid, quantity)
                 SELECT c.cart_id, :movieid, :quantity
@@ -584,7 +641,6 @@ async def rate_movie(user_id, movieid, rating):
         - "CALIFICATION_FAILED": No se pudo calificar la película
         - "UPDATE_MOVIE_FAILED": No se pudo actualizar la película
     """
-
     result = await get_movies_by_id(movieid)
     if result[1] != "OK": return "MOVIE_NOT_FOUND"
 
@@ -695,6 +751,17 @@ async def estadistica_ventas(anio, pais):
 # =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
+
+async def check_movie(movieid):
+    query = """
+        SELECT 1
+        FROM Peliculas
+        WHERE movieid = :movieid
+        AND stock > 0 AND disponible = TRUE
+        """
+    params = {"movieid": movieid}
+    result = await fetch_all(engine, query, params=params)
+    return bool(result)
 
 async def find_movie_in_cart(movieid, token):
     """

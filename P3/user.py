@@ -96,15 +96,15 @@ async def comprobar_token_admin(token):
 
 async def get_uid_by_token(token):
     """
-    Devuelve el UID asociado a un token.
+    Devuelve el UID asociado a un token siempre que el usuario siga activo.
 
     Args:
         token (str): Token de autenticación.
 
     Returns:
-        str | None: UID si existe, None en caso contrario.
+        str | None: UID si existe y el usuario está activo, None en caso contrario.
     """
-    query = "SELECT user_id FROM Usuario WHERE token LIKE :token"
+    query = "SELECT user_id FROM Usuario WHERE token LIKE :token AND active = TRUE"
     params = {"token": token}
     data = await fetch_all(engine, query, params)
     if data:
@@ -113,18 +113,24 @@ async def get_uid_by_token(token):
 
 async def user_exists(uid):
     """
-    Comprueba si existe un usuario con el UID proporcionado.
+    Comprueba si existe un usuario activo con el UID proporcionado.
 
     Args:
         uid (str): Identificador del usuario.
 
     Returns:
-        bool: True si existe, False en caso contrario.
+        tuple: (is_active: bool, status: str)
+            - (True, "OK") si el usuario existe y está activo
+            - (False, "NOT_FOUND") si no existe o está desactivado
     """
-    query = "SELECT 1 FROM Usuario WHERE user_id LIKE :uid"
+    query = "SELECT * FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
     data = await fetch_all(engine, query, params)
-    return bool(data)
+
+    if data and len(data) > 0:
+        if "active" in data[0]:
+            return data[0]["active"], "OK"
+    return False, "NOT_FOUND"
 
 async def fetch_all(engine, query, params={}):
     """
@@ -230,10 +236,10 @@ async def login_user(username, password):
 
     Returns:
         tuple: (uid, token, error_code)
-            - (uid, token, "OK") si el login es exitoso
-            - (None, None, "ERROR") si el user no existe o la contraseña es incorrecta
+            - (uid, token, "OK") si el login es exitoso (usuario activo)
+            - (None, None, "ERROR") si el user no existe, está desactivado o la contraseña es incorrecta
     """
-    query = "SELECT user_id, token FROM Usuario WHERE name ILIKE :name and password = :password;"
+    query = "SELECT user_id, token FROM Usuario WHERE name ILIKE :name and password = :password AND active = TRUE;"
     params = {"name": username, "password": password}
     data = await fetch_all(engine, query, params)
 
@@ -244,17 +250,17 @@ async def login_user(username, password):
     
 async def get_user_id(username):
     """
-    Obtiene el ID de usuario (UID) para el nombre de usuario dado.
+    Obtiene el ID de usuario (UID) para el nombre de usuario dado siempre que esté activo.
     
     Args:
         username (str): El nombre de usuario del usuario.
 
     Returns:
         tuple: (uid o False, error_code: str)
-            - (uid, "OK") si el usuario existe
-            - (False, "USER_NOT_FOUND") si el usuario no existe
+            - (uid, "OK") si el usuario existe y está activo
+            - (False, "USER_NOT_FOUND") si el usuario no existe o está desactivado
     """
-    query = "SELECT user_id FROM Usuario WHERE name ILIKE :name"
+    query = "SELECT user_id FROM Usuario WHERE name ILIKE :name AND active = TRUE;"
     params = {"name": username}
     data = await fetch_all(engine, query, params)
     if data and len(data) > 0:
@@ -288,7 +294,8 @@ async def update_user(uid, username=None, password=None, nationality=None):
     if username is None and password is None and nationality is None:
         return False, "NO_FIELDS"
 
-    if not await user_exists(uid):
+    active, status = await user_exists(uid)
+    if status != "OK" or not active:
         return False, "NOT_FOUND"
 
     fields = []
@@ -324,6 +331,10 @@ async def delete_user(uid: str):
             - (False, "NOT_FOUND") si el usuario no existe
             - (False, "FORBIDDEN") si se intenta eliminar un administrador
     """
+    # NOTE: en lugar de borra el usuario, si tiene admin True no se puede borrar
+    # ademas si tiene peliculas en el carrito no se puede borrar tampoco (mensaje)
+    # si no tiene peliculas en el carrito y ademas no ha realizado pedidos se puede borrar
+    # en caso contrario poner su bool de activo a False (no se puede loguear ni comprar)
     query = "SELECT admin FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
     data = await fetch_all(engine, query, params)
@@ -331,13 +342,41 @@ async def delete_user(uid: str):
         if data[0]["admin"]:
             return False, "FORBIDDEN"
 
-    query = "SELECT name FROM Usuario WHERE user_id LIKE :uid"
+    # Verificar si el usuario existe y esta activo (si no esta activo es como si no existiera)
+    active, status = await user_exists(uid)
+    if status != "OK" or not active:
+        return False, "USER_NOT_FOUND"
+
+    # Comprobar si el carrito del usuario tiene películas
+    query = """
+            SELECT COUNT(*) AS movie_count 
+            FROM Carrito_Pelicula cp
+            JOIN Carrito c ON cp.cart_id = c.cart_id
+            WHERE c.user_id LIKE :uid
+            """
     params = {"uid": uid}
     data = await fetch_all(engine, query, params)
 
-    if not data or len(data) == 0:
-        return False, "NOT_FOUND"
+    # Si el carrito no está vacío, no se puede eliminar el usuario
+    if data and data[0]["movie_count"] > 0:
+        return False, "NOT_EMPTY_CART"
     
+    # Comprobar si el usuario ha realizado pedidos
+    query = """
+            SELECT COUNT(*) AS order_count
+            FROM Pedido
+            WHERE user_id LIKE :uid
+            """
+    params = {"uid": uid}
+    data = await fetch_all(engine, query, params)
+
+    if data and data[0]["order_count"] > 0:
+        # Si ha realizado pedidos, marcar como inactivo en lugar de eliminar
+        query = "UPDATE Usuario SET active = FALSE WHERE user_id LIKE :uid"
+        params = {"uid": uid}
+        await fetch_all(engine, query, params)
+        return True, "OK"
+
     # Eliminar usuario de la base de datos
     query = "DELETE FROM Usuario WHERE user_id LIKE :uid"
     params = {"uid": uid}
@@ -367,7 +406,8 @@ async def add_discount(uid, discount):
     if discount <= 0 or discount > 100:
         return False, "BAD_REQUEST"
     
-    if not await user_exists(uid):
+    active, status = await user_exists(uid)
+    if status != "OK" or not active:
         return False, "USER_NOT_FOUND"
     
     query = "UPDATE Usuario SET discount = :discount WHERE user_id LIKE :target_uid"
@@ -393,8 +433,9 @@ async def get_discount(uid):
             - (None, "USER_NOT_FOUND") si el usuario no existe.
             - (None, "ERROR") en caso de fallo al consultar.
     """
-    if not await user_exists(uid):
-        return None, "USER_NOT_FOUND"
+    active, status = await user_exists(uid)
+    if status != "OK" or not active:
+        return False, "USER_NOT_FOUND"
     
     query = "SELECT discount FROM Usuario WHERE user_id LIKE :target_uid"
     params = {"target_uid": uid}
@@ -419,7 +460,8 @@ async def remove_discount(uid):
             - (False, "USER_NOT_FOUND") si el usuario no existe.
             - (False, "ERROR") en otros fallos.
     """
-    if not await user_exists(uid):
+    active, status = await user_exists(uid)
+    if status != "OK" or not active:
         return False, "USER_NOT_FOUND"
     
     query = "UPDATE Usuario SET discount = 0 WHERE user_id LIKE :target_uid"
