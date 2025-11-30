@@ -537,7 +537,6 @@ async def checkout(token):
     if (user_id := await get_user_id(token)) is None: return None, "USER_NOT_FOUND"
     # Obtener el total del carrito
     if (total := await get_cart_total(user_id)) is None: return None, "PRICE_NOT_FOUND"
-    print("Total del carrito en checkout:", total)
     # Obtener el saldo del usuario
     if (current_balance := await get_balance(user_id)) is None: return None, "BALANCE_NOT_FOUND"
     # Verificar si el saldo es suficiente para pagar el carrito
@@ -757,7 +756,7 @@ async def check_movie(movieid):
         SELECT 1
         FROM Peliculas
         WHERE movieid = :movieid
-        AND stock > 0 AND disponible = TRUE
+        AND disponible = TRUE
         """
     params = {"movieid": movieid}
     result = await fetch_all(engine, query, params=params)
@@ -851,18 +850,14 @@ async def get_cart_total(user_id):
             """
             res2 = await fetch_all(engine, q2, params={"target_uid": user_id})
             if res2 and res2[0].get("discount") is not None:
-                print("Descuento encontrado para el usuario:", res2[0]["discount"])
                 try:
                     discount = float(res2[0]["discount"])
-                    print("Descuento convertido a float:", discount)
                 except (ValueError, TypeError):
                     discount = 0.0
                 if 0.0 < discount <= 100.0:
                     total = total * (1 - (discount / 100.0))
-                    print("Total después de aplicar descuento:", total)
         except Exception:
             pass
-        print("Total del carrito:", round(float(total), 2))
         return round(float(total), 2)
     else:
         return None
@@ -878,13 +873,13 @@ async def get_user_id(token):
         str: ID del usuario o None si el token no es válido
     """
     query = """
-        SELECT user_id 
+        SELECT user_id, active
             FROM Usuario 
             WHERE token = :token
     """
     params = {"token": token}
     result = await fetch_all(engine, query, params=params)
-    if result:
+    if result and result[0]["active"]:
         return result[0]["user_id"]
     else:
         return None
@@ -1047,8 +1042,6 @@ async def http_add_movie():
         token = auth.split(" ", 1)[1].strip()
 
         # Verificar si el usuario es admin
-        if not (user_id := await get_user_id(token)):
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
         if not await user.comprobar_token_admin(token):
             return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
 
@@ -1088,8 +1081,6 @@ async def http_update_movies():
         token = auth.split(" ", 1)[1].strip()
 
         # Verificar si el usuario es admin
-        if not (user_id := await get_user_id(token)):
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
         if not await user.comprobar_token_admin(token):
             return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
 
@@ -1135,8 +1126,6 @@ async def http_delete_movies():
         token = auth.split(" ", 1)[1].strip()
 
         # Verificar si el usuario es admin
-        if not (user_id := await get_user_id(token)):
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
         if not await user.comprobar_token_admin(token):
             return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
 
@@ -1151,6 +1140,8 @@ async def http_delete_movies():
             return jsonify({'status': 'OK'}), HTTPStatus.OK
         elif status == "NOT_FOUND":
             return jsonify({'status': 'ERROR', 'message': 'Película no encontrada.'}), HTTPStatus.NOT_FOUND
+        elif status == "FORBIDDEN":
+            return jsonify({'status': 'ERROR', 'message': 'No se puede eliminar la película porque está asociada a carritos existentes.'}), HTTPStatus.FORBIDDEN
         return jsonify({'status': 'ERROR', 'message': 'No se pudo eliminar la película.'}), HTTPStatus.INTERNAL_SERVER_ERROR
 
     except Exception as exc:
@@ -1177,9 +1168,8 @@ async def http_get_movies():
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
-
         if not (user_id := await get_user_id(token)):
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.NOT_FOUND
 
         body = request.args.to_dict(flat=True)
 
@@ -1217,9 +1207,8 @@ async def http_get_movie_by_id(movieid):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
-
         if not (user_id := await get_user_id(token)):
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.NOT_FOUND
 
         data, status = await get_movies_by_id(movieid)
         if status == "OK":
@@ -1253,9 +1242,8 @@ async def http_get_cart():
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
-
         if not (user_id := await get_user_id(token)):
-            return None, "USER_NOT_FOUND"
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.NOT_FOUND
         
         data, status = await get_cart(user_id)
         if status == "OK":
@@ -1302,19 +1290,13 @@ async def http_add_to_cart(movieid):
             return jsonify({'status': 'ERROR', 'message': 'La cantidad debe ser mayor que cero.'}), HTTPStatus.BAD_REQUEST
 
         token = auth.split(" ", 1)[1].strip()
-
-        user_id = await get_user_id(token)
-        if not user_id:
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
 
         status = await add_to_cart(user_id, movieid, quantity)
 
         if status == "OK":
             return jsonify({'status': 'OK', 'message': 'Película añadida al carrito.'}), HTTPStatus.OK
-        elif status == "USER_NOT_FOUND":
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.UNAUTHORIZED
-        elif status == "MOVIE_NOT_FOUND":
-            return jsonify({'status': 'ERROR', 'message': 'No se encontró la película.'}), HTTPStatus.NOT_FOUND
         elif status == "NOT_FOUND":
             return jsonify({'status': 'ERROR', 'message': 'No se ha encontrado alguna de las búsquedas'}), HTTPStatus.NOT_FOUND
         else:
@@ -1344,6 +1326,8 @@ async def http_delete_from_cart(movieid):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.NOT_FOUND
 
         quantity = request.args.get("quantity")
         if quantity is None:
@@ -1400,6 +1384,9 @@ async def http_checkout():
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado.'}), HTTPStatus.NOT_FOUND
+
         orderid, result = await checkout(token)
         if result == "OK":
             return jsonify({'status': 'OK', 'orderid': orderid, 'message': 'Pedido creado correctamente.'}), HTTPStatus.OK
@@ -1411,12 +1398,6 @@ async def http_checkout():
             return jsonify({'status': 'ERROR', 'message': 'Saldo no encontrado'}), HTTPStatus.NOT_FOUND
         elif result == "INSUFFICIENT_BALANCE":
             return jsonify({'status': 'ERROR', 'message': 'Saldo insuficiente'}), HTTPStatus.PAYMENT_REQUIRED
-        elif result == "ADD_TO_BALANCE_FAILED":
-            return jsonify({'status': 'ERROR', 'message': 'No se pudo actualizar el saldo.'}), HTTPStatus.INTERNAL_SERVER_ERROR
-        elif result == "EMPTY_CART_FAILED":
-            return jsonify({'status': 'ERROR', 'message': 'No se pudo vaciar el carrito.'}), HTTPStatus.INTERNAL_SERVER_ERROR
-        elif result == "ORDER_ID_NOT_FOUND":
-            return jsonify({'status': 'ERROR', 'message': 'No existe pedido para el usuario.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         elif result == "CREATE_ORDER_FAILED":
             return jsonify({'status': 'ERROR', 'message': 'No se pudo crear el pedido.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         elif result == "ADD_MOVIES_TO_ORDER_FAILED":
@@ -1483,6 +1464,14 @@ async def http_get_order(order_id):
         HTTPStatus.IM_A_TEAPOT: {"status":"ERROR", "message": "El servidor se rehusa a preparar café porque es una tetera."} - El servidor se rehusa a preparar café porque es una tetera
     """
     try:
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+
+        token = auth.split(" ", 1)[1].strip()
+        if not (user_id := await get_user_id(token)):
+            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
+
         result, status = await get_order(order_id)
 
         if status == "OK":
@@ -1533,10 +1522,6 @@ async def http_rate_movie():
             return jsonify({'status': 'OK', 'message': 'Película calificada exitosamente.'}), HTTPStatus.OK
         elif result == "MOVIE_NOT_FOUND":
             return jsonify({'status': 'ERROR', 'message': 'No se encontró la película.'}), HTTPStatus.NOT_FOUND
-        elif result == "CALIFICATION_FAILED":
-            return jsonify({'status': 'ERROR', 'message': 'No se pudo calificar la película.'}), HTTPStatus.INTERNAL_SERVER_ERROR
-        elif result == "UPDATE_MOVIE_FAILED":
-            return jsonify({'status': 'ERROR', 'message': 'No se pudo actualizar la película.'}), HTTPStatus.INTERNAL_SERVER_ERROR
         else:
             return jsonify({'status': 'ERROR', 'message': 'El servidor se rehusa a preparar café porque es una tetera.'}), HTTPStatus.IM_A_TEAPOT
     except Exception as exc:
@@ -1566,9 +1551,6 @@ async def http_estadistica_ventas(anio, pais):
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
-        if not (user_id := await get_user_id(token)):
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
-
         # Verificar si el usuario es admin
         if not await user.comprobar_token_admin(token):
             return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
@@ -1639,9 +1621,6 @@ async def media_ratings():
             return jsonify({'status': 'ERROR', 'message': 'Falta Authorization Bearer'}), HTTPStatus.BAD_REQUEST
         
         token = auth.split(" ", 1)[1].strip()
-        if not (user_id := await get_user_id(token)):
-            return jsonify({'status': 'ERROR', 'message': 'Usuario no encontrado'}), HTTPStatus.NOT_FOUND
-
         if not await user.comprobar_token_admin(token):
             return jsonify({'status': 'ERROR', 'message': 'Acceso denegado. Se requieren privilegios de administrador.'}), HTTPStatus.UNAUTHORIZED
 

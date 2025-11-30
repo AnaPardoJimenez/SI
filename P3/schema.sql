@@ -8,7 +8,6 @@
 -- Estructura:
 --   - Tablas principales: Usuario, Peliculas, Actores, Carrito, Pedido
 --   - Tablas de relación: Participa, Carrito_Pelicula, Pedido_Pelicula, Calificacion
---   - Claves foráneas con ON DELETE CASCADE para mantener integridad referencial
 --
 -- Autor: Juan Larrondo Fernández de Córdoba y Ana Pardo Jiménez
 -- Fecha de creación: 28-10-2025
@@ -76,8 +75,8 @@ CREATE TABLE Calificacion (
     movieid INT,
     rating DECIMAL(10,2),
     PRIMARY KEY (user_id, movieid),
-    FOREIGN KEY (user_id) REFERENCES Usuario(user_id) ON DELETE CASCADE,
-    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES Usuario(user_id),
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
 );
 
 -- =============================================================================
@@ -88,8 +87,8 @@ CREATE TABLE Participa (
     actor_id INT,
     movieid INT,
     PRIMARY KEY (actor_id, movieid),
-    FOREIGN KEY (actor_id) REFERENCES Actores(actor_id) ON DELETE CASCADE,
-    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE
+    FOREIGN KEY (actor_id) REFERENCES Actores(actor_id),
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
 );
 
 -- =============================================================================
@@ -102,7 +101,7 @@ CREATE TABLE Carrito (
     cart_id SERIAL PRIMARY KEY,
     user_id VARCHAR(37) NOT NULL,
     total DECIMAL(10,2) DEFAULT 0.00,
-    FOREIGN KEY (user_id) REFERENCES Usuario(user_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES Usuario(user_id)
 );
 
 -- =============================================================================
@@ -114,8 +113,8 @@ CREATE TABLE Carrito_Pelicula (
     movieid INT,
     quantity INT DEFAULT 1,
     PRIMARY KEY (cart_id, movieid),
-    FOREIGN KEY (cart_id) REFERENCES Carrito(cart_id) ON DELETE CASCADE,
-    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE
+    FOREIGN KEY (cart_id) REFERENCES Carrito(cart_id),
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) 
 );
 
 -- =============================================================================
@@ -129,7 +128,7 @@ CREATE TABLE Pedido (
     total DECIMAL(10,2) NOT NULL,
     date TIMESTAMP NOT NULL,
     paid BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (user_id) REFERENCES Usuario(user_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES Usuario(user_id) 
 );
 
 -- =============================================================================
@@ -141,8 +140,8 @@ CREATE TABLE Pedido_Pelicula (
     movieid INT,
     quantity INT DEFAULT 1,
     PRIMARY KEY (order_id, movieid),
-    FOREIGN KEY (order_id) REFERENCES Pedido(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) ON DELETE CASCADE
+    FOREIGN KEY (order_id) REFERENCES Pedido(order_id),
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
 );
 
 -- =============================================================================
