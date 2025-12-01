@@ -791,6 +791,135 @@ def main():
                 print(f"\tTotal de stock: {total_stock} != {final_stock}")
 
     print("# =======================================================")
+    print("# Transacciones")
+    print("# =======================================================")    
+
+    pais_nuevo = "Canada"
+    r = requests.delete(f"{USERS}/borraPais/{pais_nuevo}", headers=headers_admin)
+    
+    if (r.status_code == HTTPStatus.OK and r.json().get("ok") == False):
+        ok(f"Borrar usuarios de un pais concreto (sin usuarios)", True)
+        print(f"\tNo se encontraron usuarios del país {pais_nuevo}")
+
+    elif (r.status_code == HTTPStatus.OK and r.json().get("ok") == True):
+        ok(f"Borrar usuarios de un pais concreto {pais_nuevo}", True)
+        print(f"\tActions: {r.json().get('actions')}")
+
+    else:
+        ok(f"Borrar usuarios de un pais concreto (error)", False)
+
+    # Añadir usuario de ese país
+    r = requests.get(f"{USERS}/user", json={"name": "transacciones", "password": "secret"})
+    if not (r.status_code == HTTPStatus.OK and r.json()):
+        
+        data = {"name": "transacciones", "password": "secret", "nationality": pais_nuevo}
+
+        r_create_transacciones = requests.put(f"{USERS}/user", json=data, headers=headers_admin)
+        ok("Crear usuario 'transacciones' para test de transacción correcta", r_create_transacciones.status_code == HTTPStatus.OK and r_create_transacciones.json())
+
+        r = requests.get(f"{USERS}/user", json={"name": "transacciones", "password": "secret"})
+
+    # Añadir otro usuario de ese país
+    r2 = requests.get(f"{USERS}/user", json={"name": "transacciones2", "password": "secret"})
+    if not (r2.status_code == HTTPStatus.OK and r2.json()):
+        r_create_transacciones2 = requests.put(
+            f"{USERS}/user",
+            json={"name": "transacciones2", "password": "secret", "nationality": pais_nuevo},
+            headers=headers_admin,
+        )
+        ok("Crear usuario 'transacciones2' para test de transacción correcta", r_create_transacciones2.status_code == HTTPStatus.OK and r_create_transacciones2.json())
+        r2 = requests.get(f"{USERS}/user", json={"name": "transacciones2", "password": "secret"})
+
+    if ok("Login usuario 'transacciones'", r.status_code == HTTPStatus.OK and r.json()) and ok("Login usuario 'transacciones2'", r2.status_code == HTTPStatus.OK and r.json()):
+        print(f"\tUID de transacciones: {r.json().get('uid')}")
+        print(f"\tUID de transacciones2: {r2.json().get('uid')}")
+    
+        r = requests.delete(f"{USERS}/borraPaisIncorrecto/{pais_nuevo}", headers=headers_admin)
+        if (ok(f"Borrar usuarios de un pais concreto con método incorrecto", r.status_code == HTTPStatus.INTERNAL_SERVER_ERROR and r.json().get("ok") == False)):
+            actions = r.json().get("actions")
+            print(f"\tActions: {actions}")
+
+        r = requests.delete(f"{USERS}/borraPais/{pais_nuevo}", headers=headers_admin)
+        if (ok(f"Borrar usuarios de un pais concreto correctamente", r.status_code == HTTPStatus.OK and r.json().get("ok") == True)):
+            actions = r.json().get("actions")
+            print(f"\tActions: {actions}")
+
+    # Añadir usuario de ese país para test de transacción intermedia
+    r = requests.get(f"{USERS}/user", json={"name": "transacciones3", "password": "secret"})
+    if not (r.status_code == HTTPStatus.OK and r.json()):
+        data = {"name": "transacciones3", "password": "secret", "nationality": pais_nuevo}
+
+        r_create_transacciones3 = requests.put(f"{USERS}/user", json=data, headers=headers_admin)
+        ok("Crear usuario 'transacciones3' para test de transacción intermedia", r_create_transacciones3.status_code == HTTPStatus.OK and r_create_transacciones3.json())
+
+        r = requests.get(f"{USERS}/user", json={"name": "transacciones3", "password": "secret"})
+    # Que el usuario transacciones3 compre un carrito con solo una película
+    print(f"\tUsuario transacciones3: {r.json()}")
+
+    # Hacemos login para obtener el token del usuario 'transacciones3'
+    r_login = requests.get(f"{USERS}/user", json={"name": "transacciones3", "password": "secret"})
+    if (ok("Login usuario 'transacciones3' para carrito", r_login.status_code == HTTPStatus.OK and r_login.json())):
+        print(f"\tLogin usuario 'transacciones3': {r_login.json()}")
+    else:
+        print(f"\tError al login usuario 'transacciones3': {r_login.json()}")
+
+    token_transacciones3 = r_login.json().get("token")
+    headers_transacciones3 = {"Authorization": f"Bearer {token_transacciones3}"}
+
+    # Añadir saldo al usuario 'transacciones3' como se hace en otros casos
+    r_credit = requests.post(f"{CATALOG}/user/credit", json={"amount": 1000}, headers=headers_transacciones3)
+    if (ok("Aumentar el saldo de transacciones3", r_credit.status_code == HTTPStatus.OK and r_credit.json())):
+        print(f"\tAumentar el saldo de transacciones3: {r_credit.json()}")
+    else:
+        print(f"\tError al aumentar el saldo de transacciones3: {r_credit.json()}")
+
+    # Obtener lista de películas para elegir una disponible (solo vamos a añadir una)
+    r_pelis = requests.get(f"{CATALOG}/movies", headers=headers_transacciones3)
+    if not (ok("Obtener catálogo de películas", r_pelis.status_code == HTTPStatus.OK and r_pelis.json())):
+        print(f"\tError al obtener catálogo de películas: {r_pelis.json()}")
+    pelicula_id = None
+    for peli in r_pelis.json():
+        if isinstance(peli, dict) and peli.get("disponible", True) and peli.get("stock", 0) > 0:
+            pelicula_id = peli.get("movieid")
+            print(f"\tPelicula [{pelicula_id}] {peli.get('title')}")
+            break
+
+    # Añadir solo UNA película al carrito
+    r_add_cart = requests.put(f"{CATALOG}/cart/{pelicula_id}", headers=headers_transacciones3)
+    if (ok("Añadir SOLO una película al carrito de transacciones3", r_add_cart.status_code == HTTPStatus.OK)):
+        print(f"\tAñadir SOLO una película al carrito de transacciones3: {r_add_cart.json()}")
+    else:
+        print(f"\tError al añadir una película al carrito de transacciones3: {r_add_cart.json()}")
+
+    # Realizar compra del carrito (solo una película)
+    r_checkout = requests.post(f"{CATALOG}/cart/checkout", headers=headers_transacciones3)
+    if (ok("Comprar el carrito de transacciones3 (una sola película)", r_checkout.status_code == HTTPStatus.OK and r_checkout.json())):
+        print(f"\tComprar el carrito de transacciones3 (una sola película): {r_checkout.json()}")
+    else:
+        print(f"\tError al comprar el carrito de transacciones3 (una sola película): {r_checkout.json()}")
+
+    # Obtener el pedido de la compra
+    r_order = requests.get(f"{CATALOG}/orders/{r_checkout.json().get('orderid')}", headers=headers_transacciones3)
+    if (ok("Obtener pedido de la compra", r_order.status_code == HTTPStatus.OK and r_order.json())):
+        order = r_order.json()
+        print(f"\tContenido - {len(order['movies'])} pelicula(s):")
+        for movie in order['movies']:
+            print(f"\t- {movie['quantity']} [id: {movie['movieid']}] {movie['title']} ({movie['price']})")
+    else:
+        print(f"\tError al obtener pedido de la compra: {r_order.json()}")
+    
+    r = requests.delete(f"{USERS}/borraPaisIntermedio/{pais_nuevo}", headers=headers_admin)
+    if (ok(f"Borrar usuarios de un pais concreto (intermedio)", r.status_code == HTTPStatus.INTERNAL_SERVER_ERROR and r.json())):
+        actions = r.json().get("actions")
+        if len(actions) == 2 and actions.get("1 pedido_pelicula") == "OK" and actions.get("2 pedido") == "OK":
+            print(f"\t✓ Acciones realizadas correctamente: {actions}")
+        else:
+            print(f"\t✗ Acciones no realizadas correctamente: {actions}")
+    else:
+        print(f"\tError al borrar usuarios de un pais concreto (intermedio): {r.json()}")
+
+
+    print("# =======================================================")
     print("# Limpiar base de datos")
     print("# =======================================================")
     

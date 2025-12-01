@@ -114,7 +114,7 @@ CREATE TABLE Carrito_Pelicula (
     quantity INT DEFAULT 1,
     PRIMARY KEY (cart_id, movieid),
     FOREIGN KEY (cart_id) REFERENCES Carrito(cart_id),
-    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid) 
+    FOREIGN KEY (movieid) REFERENCES Peliculas(movieid)
 );
 
 -- =============================================================================
@@ -147,19 +147,6 @@ CREATE TABLE Pedido_Pelicula (
 -- =============================================================================
 -- Índices para Mejorar el Rendimiento
 -- =============================================================================
--- Los siguientes índices están comentados pero pueden ser útiles para
--- optimizar consultas frecuentes. Descomentarlos si se necesita mejorar
--- el rendimiento en búsquedas por año, género o relaciones.
--- CREATE INDEX idx_peliculas_year ON Peliculas(year);
--- CREATE INDEX idx_peliculas_genre ON Peliculas(genre);
--- CREATE INDEX idx_participa_actor ON Participa(actor_id);
--- CREATE INDEX idx_participa_movie ON Participa(movieid);
--- CREATE INDEX idx_carrito_pelicula_cart ON Carrito_Pelicula(cart_id);
--- CREATE INDEX idx_carrito_pelicula_movie ON Carrito_Pelicula(movieid);
--- CREATE INDEX idx_pedido_pelicula_order ON Pedido_Pelicula(order_id);
--- CREATE INDEX idx_pedido_pelicula_movie ON Pedido_Pelicula(movieid);
--- CREATE INDEX idx_calificacion_movie ON Calificacion(movieid);
--- CREATE INDEX idx_calificacion_user ON Calificacion(user_id);
 
 -- Índice para filtrar por nacionalidad (muy selectivo)
 CREATE INDEX idx_usuario_nationality ON Usuario(nationality);

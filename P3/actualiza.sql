@@ -10,46 +10,10 @@
 
 -- ============================================================================
 -- FUNCIÓN: update_stock()
--- DESCRIPCIÓN: Actualiza automáticamente el stock de películas cuando se
---              insertan o modifican elementos en el carrito.
--- LÓGICA:
---   - INSERT: Reduce el stock (quantity negativo)
---   - UPDATE: Ajusta el stock según la diferencia entre cantidad antigua y nueva
--- ============================================================================
--- CREATE OR REPLACE FUNCTION update_stock()
--- RETURNS TRIGGER AS $$
--- DECLARE
---     quantity INT;
--- BEGIN
---     IF TG_OP = 'INSERT' THEN
---         quantity := -NEW.quantity;
---     ELSIF TG_OP = 'UPDATE' THEN
---         quantity := OLD.quantity - NEW.quantity;
---     END IF;
-
---     UPDATE Peliculas
---     SET stock = stock + quantity
---     WHERE movieid = NEW.movieid;
---     RETURN NEW;
--- END;
--- $$ LANGUAGE plpgsql;
-
--- -- TRIGGER: update_stock_trigger
--- -- Se ejecuta después de INSERT o UPDATE en la tabla carrito_pelicula
--- -- Mantiene el stock de películas sincronizado con el contenido del carrito
--- CREATE TRIGGER update_stock_trigger
--- AFTER INSERT OR UPDATE OR DELETE ON carrito_pelicula
--- FOR EACH ROW
--- EXECUTE FUNCTION update_stock();
-
-
-
--- ============================================================================
--- FUNCIÓN: return_movie_id()
 -- DESCRIPCIÓN: Devuelve el ID de la película a la que se refiere el carrito.
 -- LÓGICA: Actualiza el stock de la película según la cantidad de películas que se han eliminado del carrito.
 -- ============================================================================
-CREATE FUNCTION return_movie()
+CREATE FUNCTION update_stock()
 RETURNS TRIGGER AS $$
 DECLARE
     pedido_count INT;
@@ -93,13 +57,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- TRIGGER: return_movie_id_trigger
+-- TRIGGER: update_stock_id_trigger
 -- Se ejecuta después de DELETE o UPDATE OF quantity en la tabla carrito_pelicula
 -- Solo se activa cuando no hay pedido con el cart_id de la película que se ha eliminado del carrito
-CREATE TRIGGER return_movie_trigger
+CREATE TRIGGER update_stock_trigger
 AFTER DELETE OR UPDATE OF quantity OR INSERT ON carrito_pelicula
 FOR EACH ROW
-EXECUTE FUNCTION return_movie();
+EXECUTE FUNCTION update_stock();
 
 
 

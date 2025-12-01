@@ -477,6 +477,234 @@ async def remove_discount(uid):
     
     return True, "OK"
 
+async def borrar_pais_correcto(nombre_pais):
+
+    params = {"pais": nombre_pais.lower()}
+    res = {}
+
+    try:
+        async with engine.connect() as conn:
+            trans = await conn.begin()
+            try:
+                # Comprobar si existe un usuario
+                result = await conn.execute(text("""
+                    SELECT COUNT(*)
+                    FROM Usuario
+                    WHERE LOWER(nationality) = :pais
+                """), params)
+
+                if result.scalar() == 0:
+                    await trans.rollback()
+                    return {}, "NOT_FOUND"
+
+                # Eliminar de Pedido_Pelicula
+                await conn.execute(text("""
+                    DELETE FROM Pedido_Pelicula
+                    WHERE order_id IN (
+                        SELECT p.order_id
+                        FROM Pedido p
+                        JOIN Usuario u ON p.user_id = u.user_id
+                        WHERE LOWER(u.nationality) = :pais)
+                """), params)
+                res["1 pedido_pelicula"] = "OK"
+
+                # Eliminar de Pedido
+                await conn.execute(text("""
+                    DELETE FROM Pedido
+                    WHERE user_id IN (
+                        SELECT user_id
+                        FROM Usuario
+                        WHERE LOWER(nationality) = :pais)
+                """), params)
+                res["2 pedido"] = "OK"
+
+                # Eliminar de Carrito_Pelicula
+                await conn.execute(text("""
+                    DELETE FROM Carrito_Pelicula
+                    WHERE cart_id IN(
+                        SELECT cart_id
+                        FROM Carrito
+                        WHERE user_id IN (SELECT user_id FROM Usuario WHERE LOWER(nationality)=:pais))
+                """), params)
+                res["3 carrito_pelicula"] = "OK"
+
+                # Eliminar de Carrito
+                await conn.execute(text("""
+                    DELETE FROM Carrito
+                    WHERE user_id IN (
+                        SELECT user_id 
+                        FROM Usuario 
+                        WHERE LOWER(nationality)=:pais)
+                """), params)
+                res["4 carrito"] = "OK"
+
+                # Eliminar Calificacion
+                await conn.execute(text("""
+                    DELETE FROM Calificacion
+                    WHERE user_id IN (
+                        SELECT user_id 
+                        FROM Usuario 
+                        WHERE LOWER(nationality)=:pais)
+                """), params)
+                res["5 calificacion"] = "OK"
+                
+                # Eliminar Usuario
+                await conn.execute(text("""
+                    DELETE FROM Usuario
+                    WHERE LOWER(nationality)=:pais
+                """), params)
+                res["6 usuario"] = "OK"
+
+                await trans.commit()
+
+            except Exception as e:
+                await trans.rollback()
+                return res, "ERROR"
+    except Exception as e:
+        return res, "ERROR"
+    return res, "OK"
+
+async def borrar_pais_incorrecto(nombre_pais):
+
+    params = {"pais": nombre_pais.lower()}
+    res = {}
+    
+    try:
+        async with engine.connect() as conn:
+            trans = await conn.begin()
+            try:
+                # Comprobar si existe un usuario
+                result = await conn.execute(text("""
+                    SELECT COUNT(*)
+                    FROM Usuario
+                    WHERE LOWER(nationality) = :pais
+                """), params)
+
+                if result.scalar() == 0:
+                    await trans.rollback()
+                    return {}, "NOT_FOUND"
+                
+                # Eliminar Usuario
+                await conn.execute(text("""
+                    DELETE FROM Usuario
+                    WHERE LOWER(nationality)=:pais
+                """), params)
+                res["6 usuario"] = "OK"
+
+                # Eliminar de Pedido_Pelicula
+                await conn.execute(text("""
+                    DELETE FROM Pedido_Pelicula
+                    WHERE order_id IN (
+                        SELECT p.order_id
+                        FROM Pedido p
+                        JOIN Usuario u ON p.user_id = u.user_id
+                        WHERE LOWER(u.nationality) = :pais)
+                """), params)
+                res["1 pedido_pelicula"] = "OK"
+
+                await trans.commit()
+
+            except Exception as e:
+                await trans.rollback()
+                return res, "ERROR"
+    except Exception as e:
+        return res, "ERROR"
+    return res, "OK"
+
+async def borrar_pais_intermedio(nombre_pais):
+
+    params = {"pais": nombre_pais.lower()}
+    res = {}
+    
+    try:
+        async with engine.connect() as conn:
+            trans = await conn.begin()
+            try:
+                # Comprobar si existe un usuario
+                result = await conn.execute(text("""
+                    SELECT COUNT(*)
+                    FROM Usuario
+                    WHERE LOWER(nationality) = :pais
+                """), params)
+
+                if result.scalar() == 0:
+                    await trans.rollback()
+                    return {}, "NOT_FOUND"
+
+                # Eliminar de Pedido_Pelicula
+                await conn.execute(text("""
+                    DELETE FROM Pedido_Pelicula
+                    WHERE order_id IN (
+                        SELECT p.order_id
+                        FROM Pedido p
+                        JOIN Usuario u ON p.user_id = u.user_id
+                        WHERE LOWER(u.nationality) = :pais)
+                """), params)
+                res["1 pedido_pelicula"] = "OK"
+
+                # Eliminar de Pedido
+                await conn.execute(text("""
+                    DELETE FROM Pedido
+                    WHERE user_id IN (
+                        SELECT user_id
+                        FROM Usuario
+                        WHERE LOWER(nationality) = :pais)
+                """), params)
+                res["2 pedido"] = "OK"
+
+                await trans.commit()
+
+                trans2 = await conn.begin()
+                try:
+                    # Eliminar Usuario
+                    await conn.execute(text("""
+                        DELETE FROM Usuario
+                        WHERE LOWER(nationality)=:pais
+                    """), params)
+                    res["6 usuario"] = "OK"
+
+                    # Eliminar de Carrito_Pelicula
+                    await conn.execute(text("""
+                        DELETE FROM Carrito_Pelicula
+                        WHERE cart_id IN(
+                            SELECT cart_id
+                            FROM Carrito
+                            WHERE user_id IN (SELECT user_id FROM Usuario WHERE LOWER(nationality)=:pais))
+                    """), params)
+                    res["3 carrito_pelicula"] = "OK"
+
+                    # Eliminar de Carrito
+                    await conn.execute(text("""
+                        DELETE FROM Carrito
+                        WHERE user_id IN (
+                            SELECT user_id 
+                            FROM Usuario 
+                            WHERE LOWER(nationality)=:pais)
+                    """), params)
+                    res["4 carrito"] = "OK"
+
+                    # Eliminar Calificacion
+                    await conn.execute(text("""
+                        DELETE FROM Calificacion
+                        WHERE user_id IN (
+                            SELECT user_id 
+                            FROM Usuario 
+                            WHERE LOWER(nationality)=:pais)
+                    """), params)
+                    res["5 calificacion"] = "OK"
+
+                    await trans2.commit()
+                    
+                except Exception as e:
+                    await trans2.rollback()
+                    return res, "ERROR"
+            except Exception as e:
+                await trans.rollback()
+                return res, "ERROR"
+    except Exception as e:
+        return res, "ERROR"
+    return res, "OK"
+
 # =============================================================================
 # SERVIDOR HTTP - API REST (QUART)
 # =============================================================================
@@ -822,6 +1050,69 @@ async def http_get_discount(uid):
     
     return jsonify({'status': 'OK', 'discount': discount}), HTTPStatus.OK
 
+# =============================================================================
+# TRANSACCIONES
+# =============================================================================
+@app.route("/borraPais/<pais>", methods=["DELETE"])
+async def http_remove_country_correcto(pais):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+
+
+    token = auth.split(" ", 1)[1].strip()
+    if not await comprobar_token_admin(token):
+        return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+
+    res, status = await borrar_pais_correcto(pais)
+    if status == "NOT_FOUND":
+        return jsonify({"ok": False, "error": "No existe ningún usuario que sea de ese pais", "actions": res}), HTTPStatus.OK
+    elif status == "ERROR":
+        return jsonify({"ok": False, "error": "Error al borrar país", "actions": res}), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+    return jsonify({"ok": True, "message": "País borrado correctamente", "actions": res}), HTTPStatus.OK
+
+
+
+@app.route("/borraPaisIncorrecto/<pais>", methods=["DELETE"])
+async def http_remove_country_incorrecto(pais):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+
+
+    token = auth.split(" ", 1)[1].strip()
+    if not await comprobar_token_admin(token):
+        return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+
+    res, status = await borrar_pais_incorrecto(pais)
+    if status == "NOT_FOUND":
+        return jsonify({"ok": False, "error": "No existe ningún usuario que sea de ese pais", "actions": res}), HTTPStatus.OK
+    elif status == "ERROR":
+        return jsonify({"ok": False, "error": "Error al borrar país", "actions": res}), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+    return jsonify({"ok": True, "message": "País borrado correctamente", "actions": res}), HTTPStatus.OK
+
+
+
+@app.route("/borraPaisIntermedio/<pais>", methods=["DELETE"])
+async def http_remove_country_intermedio(pais):
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"ok": False, "error": "Falta Authorization Bearer"}), HTTPStatus.BAD_REQUEST
+
+
+    token = auth.split(" ", 1)[1].strip()
+    if not await comprobar_token_admin(token):
+        return jsonify({"ok": False, "error": "Token no válido"}), HTTPStatus.UNAUTHORIZED
+
+    res, status = await borrar_pais_intermedio(pais)
+    if status == "NOT_FOUND":
+        return jsonify({"ok": False, "error": "No existe ningún usuario que sea de ese pais", "actions": res}), HTTPStatus.OK
+    elif status == "ERROR":
+        return jsonify({"ok": False, "error": "Error al borrar país", "actions": res}), HTTPStatus.INTERNAL_SERVER_ERROR
+    
+    return jsonify({"ok": True, "message": "País borrado correctamente", "actions": res}), HTTPStatus.OK
 
 # =============================================================================
 # PUNTO DE ENTRADA PRINCIPAL
