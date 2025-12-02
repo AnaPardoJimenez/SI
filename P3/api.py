@@ -68,8 +68,6 @@ async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession
 # FUNCIONES DE GESTIÓN DE CATÁLOGO
 # =============================================================================
 
-# TODO: Añadir que si la pelicula esta creada (y disponible), se aumente el stock en vez de
-# crear una nueva entrada
 async def add_movie(movie_data: dict):
     """
     Añade una película al catálogo con los campos mínimos requeridos.
