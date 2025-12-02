@@ -148,11 +148,7 @@ CREATE TABLE Pedido_Pelicula (
 -- Índices para Mejorar el Rendimiento
 -- =============================================================================
 
--- Índice para filtrar por nacionalidad (muy selectivo)
+-- Índice para filtrar por nacionalidad
 CREATE INDEX idx_usuario_nationality ON Usuario(nationality);
 -- Índice para el JOIN (user_id en Pedido)
-CREATE INDEX idx_pedido_user_id ON Pedido(user_id);
--- Alternativa: índice solo en date si hay muchas consultas por fecha
-CREATE INDEX idx_pedido_date ON Pedido(date);
--- Índice compuesto para la consulta (date + user_id para mejor rendimiento)
-CREATE INDEX idx_pedido_date_user ON Pedido(user_id, date);
+CREATE INDEX idx_pedido_user_date ON Pedido(user_id, date);
