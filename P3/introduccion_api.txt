@@ -1,9 +1,0 @@
-API API
-
-El módulo api.py implementa el servicio principal del sistema de catálogo de películas. Este microservicio se ejecuta en el puerto 5051 y proporciona funcionalidades para la búsqueda de películas, gestión de carritos de compra, procesamiento de pedidos y calificación de películas.
-
-El servicio permite buscar películas aplicando diversos filtros como título, año, género o actores, y también ofrece funcionalidades para obtener las películas más populares. Los usuarios pueden gestionar un carrito de compra personal donde añaden películas antes de realizar la compra.
-
-El proceso de checkout verifica el saldo del usuario, crea el pedido y actualiza el saldo tras la compra. El sistema también incluye funcionalidad para calificar películas, actualizando automáticamente el rating promedio.
-
-Todas las operaciones requieren autenticación mediante un token Bearer obtenido del servicio de usuarios.

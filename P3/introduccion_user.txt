@@ -1,7 +1,0 @@
-API USER
-
-El módulo user.py implementa el servicio de gestión de usuarios para el sistema de catálogo de películas. Este microservicio se ejecuta en el puerto 5050 y proporciona funcionalidades para la creación, autenticación y eliminación de usuarios.
-
-El servicio gestiona la creación de cuentas de usuario con sus credenciales, generando automáticamente un identificador único, un token de autenticación y un saldo inicial. También crea un carrito de compra asociado a cada nuevo usuario.
-
-Las contraseñas se almacenan de forma segura utilizando SHA-512 con un salt, y el sistema utiliza tokens UUID para la autenticación. Los administradores tienen permisos especiales para crear y eliminar usuarios, mientras que los usuarios regulares solo pueden autenticarse.
